@@ -35,7 +35,11 @@ from matplotlib.pyplot import Figure
 import pandas as pd
 import datetime
 from .markdown_make import markdown_make_main
+import logging
+import re
+import numpy as np
 
+logger = logging.getLogger('aggdev.log')
 
 # import sys
 # import re
@@ -74,7 +78,7 @@ debug: true
 """
 
     def __init__(self, file_name, key, title='DocMaker Document', to_format='latex',
-                 file_format='pdf', tidy=True):
+                 file_format='pdf', output_style='caption', tidy=True):
         """
         file_name of output, including extension
 
@@ -86,17 +90,28 @@ debug: true
         tidy: search through the subfolders of the base output and delete all files key-*.*
 
         to_format can be latex or beamer (later: add the style elements)
+
+        :param file_name:
+        :param key:
+        :param title:
+        :param to_format:
+        :param file_format:
+        :param output_style: caption (caption in main doc just numbers in include),
+                    in-line (all in main doc) or with_table (all in include file)
+        :param tidy:
+
         """
 
         self.title = title
         self.key = key
+        self.output_style = output_style
 
         self.file_format = file_format
         self.to_format = to_format
         self.file_name = file_name
         self.file = Path(file_name)
 
-        existing = list(self.file.parent.glob(f'**/{key}*.*'))
+        existing = list(self.file.parent.glob(f'**/{key}-*.*'))
         if len(existing):
             print(f"{'Deleting' if tidy else 'There are'} {len(existing)} existing file(s)...")
         for f in existing:
@@ -150,13 +165,13 @@ debug: true
     def print_buffer(self):
         print(self.get_buffer())
 
-    def write_markdown(self):
+    def write_markdown(self, font_size, margin):
         """
         persist and write out the StringIO cache to a physical file
         """
         yaml = self.__yaml__.format(
             title=self.title, created=self._date_(),
-            font_size=10, margin=1,
+            font_size=font_size, margin=margin,
             number_sections="true", link_citations="true",
             to_format=self.to_format, file_format=self.file_format)
 
@@ -164,9 +179,10 @@ debug: true
             f.write(yaml)
             f.write(self.sio.getvalue())
 
-    def process(self):
+    def process(self, font_size=10, margin=0.5):
         """
-        Write out and run pandoc to convert, use
+        Write out and run pandoc to convert
+        Can set font_size and margin here, default 10 and 0.5 inches.
         """
         # need to CD into appropriate directory
         # do NOT overwrite if just using to create the exhibits and you are happy with the md "holder"
@@ -176,7 +192,7 @@ debug: true
             return
 
         if not self.file.exists():
-            self.write_markdown()
+            self.write_markdown(font_size, margin)
         cwd = Path.cwd()
         print(str(self.file))
         os.chdir(self.file.parent)
@@ -226,6 +242,12 @@ debug: true
         fig_file_local = f'img/{self.key}-{label}.pdf'
         f.savefig(fig_file, **kwargs)
 
+        # clean label
+        label = self.clean_name(label)
+        # not the caption, that can contain tex
+        if not self.escaped_(caption):
+            logger.warning('Caption contains unescaped underscores _. You must ensure they are in dollars.')
+
         if caption != '':
             fig_text = f'![{caption} '
         else:
@@ -241,7 +263,7 @@ debug: true
     def table(self, df, label, caption="",
               float_format=None, fill_nan='',
               here='', font_size='', sideways=False,
-              sparsify=False, force_float=False, output_style='with_table', **kwargs):
+              sparsify=False, force_float=False, output_style='default', **kwargs):
         """
         Add a table
         label used as file name
@@ -263,6 +285,61 @@ debug: true
 
         font_size = scriptsize, footnotesize etc.
 
+        label and columns have _ escaped for TeX but the caption is not - so beware!
+
+        Test Cases
+        ==========
+
+            import great as grt
+            from great.doc_maker import DocMaker
+            df = grt.test_df()
+
+            DM = doc.DocMaker(f'notes\\vig-n-tester-example.md',
+                              key=f'vig-n',
+                              title='All Different Table Options',
+                              tidy=True)
+
+            DM.text('Writing test examples of all combinations to file. ')
+            j = 0
+            sideways = False
+            for fs in ['normalsize', 'footnotesize', 'scriptsize', 'tiny']:
+                    for output_style in ['with_table', 'inline', 'caption']:
+                        j += 1
+                        DM.table(df, f'test-{j}',
+                                 f'Caption 1 with settings font-size={fs}, sideways={sideways}, output-style={output_style.replace("_", "-")}',
+                                 font_size=fs, sideways=sideways, output_style=output_style)
+
+            sideways = True
+            df = grt.test_df(ncols=20)
+
+            # reveals there is  no tiny!
+            for fs in ['normalsize', 'footnotesize', 'scriptsize', 'tiny']:
+                j += 1
+                DM.table(df, f'test-{j}',
+                         f'Caption 1 with settings font-size={fs}, sideways={sideways}',
+                         font_size=fs, sideways=sideways)
+
+
+            DM.process()
+
+
+        Parameters
+        ==========
+
+        :param df:
+        :param label:
+        :param caption:
+        :param float_format:
+        :param fill_nan:
+        :param here:
+        :param font_size:
+        :param sideways:
+        :param sparsify:
+        :param force_float:
+        :param output_style:
+        :param kwargs:
+        :return:
+
         """
         if self._off:
             return df
@@ -271,34 +348,27 @@ debug: true
         ncols = len(df.columns)
         if ncols >= 12:
             sideways = True
-
         # do not try to guess font size...just input it sensibly!
+
+        if output_style == 'default':
+            output_style = self.output_style
 
         # will want a much better approach!
         if float_format is None:
-            float_format = lambda x: f'{x:.3g}'
+            float_format = lambda x: f'{x:.5g}'
 
+        df = df.copy()
         if force_float:
             df = df.astype(float, errors='ignore')
-        else:
-            df = df.copy()
 
         # have to handle column names that may include _
         # For now assume there are not TeX names
-        def clean_name(n):
-            try:
-                if type(n) == str:
-                    return n.replace('_', r'\_')
-                else:
-                    return n
-            except:
-                return n
+        label = self.clean_name(label)
+        # not the caption, that can contain tex
+        if not self.escaped_(caption):
+            logger.warning('Caption contains unescaped underscores _. You must ensure they are in dollars.')
 
-        if not isinstance(df.columns, pd.core.indexes.multi.MultiIndex):
-            df.columns = map(clean_name, df.columns)
-
-        if not isinstance(df.index, pd.core.indexes.multi.MultiIndex):
-            df.index = map(clean_name, df.index)
+        df = self.clean_index(df)
 
         s = df.to_latex(float_format=float_format, sparsify=sparsify, escape=False, **kwargs)
         s = s.replace('nan', fill_nan)
@@ -318,8 +388,8 @@ debug: true
         else:
             tt = 'table'
 
-        s_md_pre = f'\n\\begin{{{tt}}}{here}\n{font_size}\\caption{{{caption}}}\n'
-        s_table = f'\\medskip\n\\label{{tab:{label}}}\n\centering\n{s}'
+        s_md_pre = f'\n\\begin{{{tt}}}{here}\n{font_size}\\caption{{{caption}}}\n\\label{{tab:{label}}}\n'
+        s_table = f'\\medskip\n\\centering\n{s}'
         s_md_post = f'{ends_font_size}\\end{{{tt}}}\n\n'
 
         table_file = self.table_dir / f'{self.key}-{label}.md'
@@ -330,7 +400,7 @@ debug: true
                 f.write('\n')
                 f.write(s_table)
             self.sio.write(s_md_pre)
-            self.sio.write(f'@@@include {table_file_local}\n\n')
+            self.sio.write(f'\n@@@include {table_file_local}\n\n')
             self.sio.write(s_md_post)
 
         elif (output_style == 'inline') or (output_style == 'in-line'):
@@ -349,4 +419,57 @@ debug: true
             raise ValueError(f'Unknown option {output_style} for output_style passed to table.')
 
         return df.style.format(float_format)
+
+    @staticmethod
+    def clean_name(n):
+        try:
+            if type(n) == str:
+                return n.replace('_', r'\_')
+            else:
+                return n
+        except:
+            return n
+
+    @staticmethod
+    def escaped_(s):
+        """
+        check s for unescaped _s
+        returns true if all _ escaped else false
+        :param s:
+        :return:
+        """
+        return np.all([s[x.start() - 1] == '\\' for x in re.finditer('_', s)])
+
+    @staticmethod
+    def clean_index(df):
+        """
+        escape _ for columns and index
+        whether multi or not
+
+        !!! you can do this with a renamer...
+
+        :param df:
+        :return:
+        """
+        # columns
+        if isinstance(df.columns, pd.core.indexes.multi.MultiIndex):
+            df.columns = DocMaker.clean_mindex_work(df.columns)
+        else:
+            df.columns = map(DocMaker.clean_name, df.columns)
+
+        # index
+        if isinstance(df.index, pd.core.indexes.multi.MultiIndex):
+            df.index = DocMaker.clean_mindex_work(df.index)
+        else:
+            df.index = map(DocMaker.clean_name, df.index)
+
+        return df
+
+    @staticmethod
+    def clean_mindex_work(idx):
+        for i, lv in enumerate(idx.levels):
+            if lv.dtype == 'object':
+                repl = map(DocMaker.clean_name, lv)
+                idx = idx.set_levels(repl, level=i)
+        return idx
 
