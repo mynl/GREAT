@@ -77,8 +77,8 @@ debug: true
 
 """
 
-    def __init__(self, file_name, key, title='DocMaker Document', to_format='latex',
-                 file_format='pdf', output_style='caption', tidy=True):
+    def __init__(self, file_name, key='', title='DocMaker Document', to_format='latex',
+                 file_format='pdf', output_style='caption', tidy=True, back_up=True):
         """
         file_name of output, including extension
 
@@ -91,25 +91,35 @@ debug: true
 
         to_format can be latex or beamer (later: add the style elements)
 
+        depending on how you name the key the existing pdf file may be deleted.
+        key = vig-{vig}-something and file = key.md then it will NOT be because only key-*.* files
+        are deleted. This is the recommended approach and is the default if key is ''.
+
         :param file_name:
-        :param key:
+        :param key:           defaults to filename excl. the extension
         :param title:
         :param to_format:
         :param file_format:
         :param output_style: caption (caption in main doc just numbers in include),
                     in-line (all in main doc) or with_table (all in include file)
-        :param tidy:
-
+        :param tidy: delete old working files, default True
+        :param back_up: make a back up of the last output file, default True
         """
 
         self.title = title
-        self.key = key
         self.output_style = output_style
-
         self.file_format = file_format
         self.to_format = to_format
         self.file_name = file_name
         self.file = Path(file_name)
+        # just ability to generate a unique number so do not have to be careful labels are unique
+        self._number = iter(range(10000))
+        self.labels = []
+        if key == '':
+            key = self.key = self.file.stem
+        else:
+            self.key = key
+
 
         existing = list(self.file.parent.glob(f'**/{key}-*.*'))
         if len(existing):
@@ -124,14 +134,24 @@ debug: true
         # just on principle
         print('Checking for TMP files...')
         for f in self.file.parent.glob(f'TMP_*.md'):
-            print(f'Deleing {f}')
+            print(f'Deleting {f}')
             f.unlink()
 
         self.file.parent.mkdir(parents=True, exist_ok=True)
 
         self.out_dir = self.file.cwd() / self.file.parent / 'pdf'
         self.out_dir.mkdir(parents=True, exist_ok=True)
-        self.out_file = self.out_dir / f'{self.file.parent.stem}.{file_format}'
+        # note this isn't actually used in markdown_make - that creates the filename itself
+        self.out_file = self.out_dir / f'{self.file.stem}.{file_format}'
+
+        # however it is used here in make a backup
+        if self.out_file.exists() and back_up:
+            print(f"Creating back up of {self.out_file} to {self.out_file.with_name(f'previous-{self.out_file.name}')}")
+            bup = self.out_file.with_name(f'previous-{self.out_file.name}')
+            print(f'Deleting existing backup...')
+            if bup.exists():
+                bup.unlink()
+            self.out_file.rename(bup)
 
         self.to_format = to_format
         self.figure_no = 0
@@ -141,6 +161,14 @@ debug: true
         self.table_dir.mkdir(parents=True, exist_ok=True)
         self.sio = StringIO()
         self._off = False
+
+    def make_unique(self, label):
+        """ for labelling exhibits uniquely """
+        if label in self.labels:
+            label = f'{label}-{next(self._number)}'
+        else:
+            self.labels.append(label)
+        return label
 
     @property
     def on(self):
@@ -179,7 +207,7 @@ debug: true
             f.write(yaml)
             f.write(self.sio.getvalue())
 
-    def process(self, font_size=10, margin=0.5):
+    def process(self, font_size=10, margin=1):
         """
         Write out and run pandoc to convert
         Can set font_size and margin here, default 10 and 0.5 inches.
@@ -244,6 +272,8 @@ debug: true
 
         # clean label
         label = self.clean_name(label)
+        label = self.make_unique(label)
+
         # not the caption, that can contain tex
         if not self.escaped_(caption):
             logger.warning('Caption contains unescaped underscores _. You must ensure they are in dollars.')
@@ -262,7 +292,7 @@ debug: true
 
     def table(self, df, label, caption="",
               float_format=None, fill_nan='',
-              here='', font_size='', sideways=False,
+              here='', font_size='', sideways=False, custom_font_size=0.0,
               sparsify=False, force_float=False, output_style='default', **kwargs):
         """
         Add a table
@@ -333,6 +363,8 @@ debug: true
         :param fill_nan:
         :param here:
         :param font_size:
+        :param custom_font_size:  e.g.  input the size 0.15, second size will be scaled up appropriately. Overrides font_size
+        \fontsize{0.15cm}{0.170cm}\selectfont
         :param sideways:
         :param sparsify:
         :param force_float:
@@ -344,10 +376,10 @@ debug: true
         if self._off:
             return df
 
-        # make some sensible choices
-        ncols = len(df.columns)
-        if ncols >= 12:
-            sideways = True
+        # make some sensible choices: this is not really helpful...too much like driver assist
+        # ncols = len(df.columns)
+        # if ncols >= 12:
+        #     sideways = True
         # do not try to guess font size...just input it sensibly!
 
         if output_style == 'default':
@@ -364,6 +396,7 @@ debug: true
         # have to handle column names that may include _
         # For now assume there are not TeX names
         label = self.clean_name(label)
+        label = self.make_unique(label)
         # not the caption, that can contain tex
         if not self.escaped_(caption):
             logger.warning('Caption contains unescaped underscores _. You must ensure they are in dollars.')
@@ -381,6 +414,11 @@ debug: true
             ends_font_size = '\\normalsize\n'
         else:
             ends_font_size = ''
+        if custom_font_size:
+            font_size = f'\\fontsize{{{custom_font_size}cm}}{{{18/15*custom_font_size}cm}}\selectfont\n'
+            ends_font_size = '\\normalsize\n'
+        else:
+            ends_font_size = ''
 
         # table type
         if sideways:
@@ -389,7 +427,7 @@ debug: true
             tt = 'table'
 
         s_md_pre = f'\n\\begin{{{tt}}}{here}\n{font_size}\\caption{{{caption}}}\n\\label{{tab:{label}}}\n'
-        s_table = f'\\medskip\n\\centering\n{s}'
+        s_table = f'\medskip\n\\centering\n{s}'
         s_md_post = f'{ends_font_size}\\end{{{tt}}}\n\n'
 
         table_file = self.table_dir / f'{self.key}-{label}.md'
