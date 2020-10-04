@@ -38,6 +38,7 @@ from .markdown_make import markdown_make_main
 import logging
 import re
 import numpy as np
+import shutil
 
 logger = logging.getLogger('aggdev.log')
 
@@ -69,16 +70,17 @@ header-includes:
 cla: --standalone
 cla: -f markdown+smart+yaml_metadata_block+citations
 cla: --pdf-engine=xelatex
-cla: -t {to_format}
 cla: -o {file_format}
 cla: --filter pandoc-citeproc
+cla: -t {to_format}
 debug: true
 ---
 
 """
 
     def __init__(self, file_name, key='', title='DocMaker Document', to_format='latex',
-                 file_format='pdf', output_style='caption', tidy=True, back_up=True):
+                 file_format='pdf', fig_format='pdf', output_style='with_table', tidy=False, back_up=True,
+                 label_prefix='', figure_dir='', table_dir='', unique_mode=False):
         """
         file_name of output, including extension
 
@@ -104,14 +106,23 @@ debug: true
                     in-line (all in main doc) or with_table (all in include file)
         :param tidy: delete old working files, default True
         :param back_up: make a back up of the last output file, default True
+        :param unique_mode: make output file names unique
+        :param label_prefix: prefix to add to labels for sub part vigs, these are only used in the docs for TeX
+                    accessed labels; they are not used to generate the filename - since these already refer
+                    to the vig name
+                    figure_dir
+                    table_dir over-ride defaults for figure and table outputs
         """
 
+        self.unique_mode = unique_mode
         self.title = title
         self.output_style = output_style
         self.file_format = file_format
+        self.fig_format = fig_format
         self.to_format = to_format
         self.file_name = file_name
         self.file = Path(file_name)
+        self.label_prefix = f'{label_prefix}-' if label_prefix else ''
         # just ability to generate a unique number so do not have to be careful labels are unique
         self._number = iter(range(10000))
         self.labels = []
@@ -124,8 +135,8 @@ debug: true
         existing = list(self.file.parent.glob(f'**/{key}-*.*'))
         if len(existing):
             print(f"{'Deleting' if tidy else 'There are'} {len(existing)} existing file(s)...")
-        for f in existing:
-            print(f)
+        # for f in existing:
+        #     print(f)
 
         if tidy:
             for f in existing:
@@ -146,28 +157,32 @@ debug: true
 
         # however it is used here in make a backup
         if self.out_file.exists() and back_up:
-            print(f"Creating back up of {self.out_file} to {self.out_file.with_name(f'previous-{self.out_file.name}')}")
-            bup = self.out_file.with_name(f'previous-{self.out_file.name}')
-            print(f'Deleting existing backup...')
-            if bup.exists():
-                bup.unlink()
-            self.out_file.rename(bup)
+            backup = self.out_dir / f'backup/{self.out_file.name}'
+            print(f"Creating back up of {self.out_file} to {backup}")
+            shutil.copy(str(self.out_file), str(backup))
 
         self.to_format = to_format
         self.figure_no = 0
-        self.figure_dir = self.file.parent / 'img'
+        if figure_dir == '':
+            self.figure_dir = self.file.parent / 'img'
+        else:
+            self.figure_dir = Path(figure_dir)
         self.figure_dir.mkdir(parents=True, exist_ok=True)
-        self.table_dir = self.file.parent / 'table'
+        if table_dir == '':
+            self.table_dir = self.file.parent / 'table'
+        else:
+            self.table_dir = Path(table_dir)
         self.table_dir.mkdir(parents=True, exist_ok=True)
         self.sio = StringIO()
         self._off = False
 
     def make_unique(self, label):
         """ for labelling exhibits uniquely """
-        if label in self.labels:
-            label = f'{label}-{next(self._number)}'
-        else:
-            self.labels.append(label)
+        if self.unique_mode:
+            if label in self.labels:
+                label = f'{label}-{next(self._number)}'
+            else:
+                self.labels.append(label)
         return label
 
     @property
@@ -193,6 +208,29 @@ debug: true
     def print_buffer(self):
         print(self.get_buffer())
 
+    def include_source(self, file_name):
+        """
+        file_name = name of ipynb file without the extension
+
+        :param file_name:
+        :return:
+        """
+        self.text(f'''
+
+\\clearpage
+
+\\scriptsize
+
+```python
+
+@@@include code/{file_name}.py
+
+```
+
+\\normalsize
+
+''')
+
     def write_markdown(self, font_size, margin):
         """
         persist and write out the StringIO cache to a physical file
@@ -207,10 +245,13 @@ debug: true
             f.write(yaml)
             f.write(self.sio.getvalue())
 
-    def process(self, font_size=10, margin=1):
+    def process(self, font_size=10, margin=1, over_write=True):
         """
         Write out and run pandoc to convert
-        Can set font_size and margin here, default 10 and 0.5 inches.
+        Can set font_size and margin here, default 10 and 1 inches.
+
+        Set over_write = False and an existing markdown file will not be overwritten.
+
         """
         # need to CD into appropriate directory
         # do NOT overwrite if just using to create the exhibits and you are happy with the md "holder"
@@ -219,7 +260,7 @@ debug: true
             print('Currently in OFF mode...returning')
             return
 
-        if not self.file.exists():
+        if self.file.exists() == False or over_write:
             self.write_markdown(font_size, margin)
         cwd = Path.cwd()
         print(str(self.file))
@@ -266,13 +307,15 @@ debug: true
                 print(f'Cannot coerce input object {f} into a figure...ignoring')
                 raise ae
 
-        fig_file = self.figure_dir / f'{self.key}-{label}.pdf'
-        fig_file_local = f'img/{self.key}-{label}.pdf'
+        # do not want the prefix to be used in the file name, just the internal lable
+        label = self.make_unique(label)
+        fig_file = self.figure_dir / f'{self.key}-{label}.{self.fig_format}'
+        fig_file_local = f'img/{self.key}-{label}.{self.fig_format}'
         f.savefig(fig_file, **kwargs)
+        label = f'{self.label_prefix}{label}'
 
         # clean label
         label = self.clean_name(label)
-        label = self.make_unique(label)
 
         # not the caption, that can contain tex
         if not self.escaped_(caption):
@@ -290,11 +333,93 @@ debug: true
         fig_text += '\n\n'
         self.sio.write(fig_text)
 
+    def wide_table(self, df, label, caption="", nparts=2,
+              float_format=None, fill_nan='',
+              here='', font_size='', custom_font_size=0.0,
+              sparsify=False, force_float=False, output_style='default', **kwargs):
+        """
+
+        nparts = split the table into nparts
+
+        Splits df and passes to table to do the work.
+
+        Large Tables
+        ============
+
+        Makes some attempt to split up very large tables
+
+
+        Example
+
+        ```python
+
+        import great as grt
+
+        DM = grt.DocMaker(f'notes\\dm.md',
+                  key=f'dm-test',
+                  title=f"Test of DocMaker",
+                  tidy=True, back_up=True)
+
+        t = grt.test_df(10, 20)
+        DM.table(t, 'all-in-one', 'Trying to put the whole thing togeher. ')
+        DM.wide_table(t, 'wide-table', 'Splitting into 3 parts. ', nparts=3)
+        DM.process(12, 1)
+        ```
+
+        ```tex
+            \\begin{sidewaystable}
+             \\caption{Table One}\\label{tab:one}
+             \\centering
+             \\begin{tabular}{*{4}{c}} \\toprule
+               Table Head & Table Head & Table Head & Table Head \\\\ \\midrule
+               Some Values & Some Values & Some Values & Some Values \\\\
+               Some Values & Some Values & Some Values & Some Values \\\\
+               Some Values & Some Values & Some Values & Some Values \\\\
+               Some Values & Some Values & Some Values & Some Values \\\\ \\bottomrule
+             \\end{tabular}
+
+            \\vspace{2\\baselineskip}
+            \\caption{Table Two}\\label{tab:two}
+             \\centering
+             \\begin{tabular}{*{4}{c}} \\toprule
+               Table Head & Table Head & Table Head & Table Head \\\\ \\midrule
+               Some Values & Some Values & Some Values & Some Values \\\\
+               Some Values & Some Values & Some Values & Some Values \\\\
+               Some Values & Some Values & Some Values & Some Values \\\\
+               Some Values & Some Values & Some Values & Some Values \\\\ \\bottomrule
+             \\end{tabular}
+            \\end{sidewaystable}
+        ```
+
+        :return:
+
+        """
+
+        cols = df.shape[1]
+        cols_per_part = cols // nparts
+        if nparts * cols_per_part < cols:
+            cols_per_part += 1
+
+        for i, b in enumerate(range(0, cols, cols_per_part)):
+            bit = df.iloc[:, b:b + cols_per_part]
+            lbl = f'{self.label_prefix}{label}-{i}-of-{nparts}'
+            if i == 0:
+                c = f"{caption} Part {i+1} of {nparts}."
+            else:
+                c = f"Table {label.replace('-', ' ')} continued, part {i+1} of {nparts}"
+            display(
+                self.table(bit, lbl,
+                        caption=c,
+                        float_format=float_format, fill_nan=fill_nan,
+                        here=here, font_size=font_size, sideways=True, custom_font_size=custom_font_size,
+                        sparsify=False, force_float=False, output_style='with_table', **kwargs)
+                     )
+
     def table(self, df, label, caption="",
               float_format=None, fill_nan='',
               here='', font_size='', sideways=False, custom_font_size=0.0,
               sparsify=False, force_float=False, output_style='default', **kwargs):
-        """
+        r"""
         Add a table
         label used as file name
         stuff table in clipboard latex table, save to file...add caption, labels etc.
@@ -352,7 +477,6 @@ debug: true
 
             DM.process()
 
-
         Parameters
         ==========
 
@@ -369,6 +493,7 @@ debug: true
         :param sparsify:
         :param force_float:
         :param output_style:
+        Can be None (default) or first, mid, last.
         :param kwargs:
         :return:
 
@@ -386,8 +511,14 @@ debug: true
             output_style = self.output_style
 
         # will want a much better approach!
+        def default_ff(x):
+            try:
+                return f'{x:.4g}'
+            except:
+                return x
+
         if float_format is None:
-            float_format = lambda x: f'{x:.5g}'
+            float_format = default_ff
 
         df = df.copy()
         if force_float:
@@ -395,8 +526,10 @@ debug: true
 
         # have to handle column names that may include _
         # For now assume there are not TeX names
-        label = self.clean_name(label)
         label = self.make_unique(label)
+        label_fn = self.clean_name(label)
+        label = f'{self.label_prefix}{label_fn}'
+
         # not the caption, that can contain tex
         if not self.escaped_(caption):
             logger.warning('Caption contains unescaped underscores _. You must ensure they are in dollars.')
@@ -415,7 +548,7 @@ debug: true
         else:
             ends_font_size = ''
         if custom_font_size:
-            font_size = f'\\fontsize{{{custom_font_size}cm}}{{{18/15*custom_font_size}cm}}\selectfont\n'
+            font_size = f'\\fontsize{{{custom_font_size}cm}}{{{18/15*custom_font_size}cm}}\\selectfont\n'
             ends_font_size = '\\normalsize\n'
         else:
             ends_font_size = ''
@@ -430,10 +563,10 @@ debug: true
         s_table = f'\medskip\n\\centering\n{s}'
         s_md_post = f'{ends_font_size}\\end{{{tt}}}\n\n'
 
-        table_file = self.table_dir / f'{self.key}-{label}.md'
-        table_file_local = f'table/{self.key}-{label}.md'
+        table_file = self.table_dir / f'{self.key}-{label_fn}.md'
+        table_file_local = f'tables/{self.key}-{label_fn}.md'
 
-        if output_style == 'with_table':
+        if output_style == 'caption':
             with table_file.open('w', encoding='utf-8') as f:
                 f.write('\n')
                 f.write(s_table)
@@ -446,7 +579,7 @@ debug: true
             self.sio.write(s_table)
             self.sio.write(s_md_post)
 
-        elif output_style == 'caption':
+        elif output_style == 'with_table':
             with table_file.open('w', encoding='utf-8') as f:
                 f.write(s_md_pre)
                 f.write(s_table)
@@ -460,6 +593,12 @@ debug: true
 
     @staticmethod
     def clean_name(n):
+        """
+        escape underscores
+
+        :param n:
+        :return:
+        """
         try:
             if type(n) == str:
                 return n.replace('_', r'\_')

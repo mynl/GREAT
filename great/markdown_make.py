@@ -22,6 +22,7 @@ import string
 import unicodedata
 import datetime
 import pathlib
+import shutil
 
 # for MarkdownMake
 CREATE_NO_WINDOW = 0x08000000
@@ -68,9 +69,16 @@ def markdown_make_main(*argv):
     if there is no YAML at the top looks up the directory tree for a file called LOCAL_YAML
     and uses that in place.
 
+    mode = quick: run pandoc and then pdflatex separately (avoids multiple runs); if there is a template
+    it is used via a first line %&/s/telos/common/sjm-doc-template taken from the YAML
+
     :param argv:
     :return:
     """
+
+    debug = 0
+    def dp(x):
+        if debug: print(x)
 
     print('RUNNING DOCMAKER VERSION ' * 5)
 
@@ -81,6 +89,14 @@ def markdown_make_main(*argv):
         argv = sys.argv
 
     ydic = {}
+
+    # update biblio file if we appear to be processing the book...
+    book = pathlib.Path(argv[1])
+    making_book = False
+    if str(book.parent.absolute()).find('spectral_risk_measures_monograph') >= 0 or \
+       str(book.parent.absolute()).find('book-hack'):
+        making_book = True
+        update_book_bibfile()
 
     # fix the date
     insert_date(argv[1])
@@ -110,7 +126,7 @@ def markdown_make_main(*argv):
     # print(ydic)
     # fa = re.findall(r'^cla[^\n]+\n', txt, re.MULTILINE)
     # print(fa)
-    txt, n = re.subn(r'^cla[^\n]+\n', '', txt, flags=re.MULTILINE)
+    txt, n = re.subn(r'^cla[ ]*:[^\n]+\n', '', txt, flags=re.MULTILINE)
     print(f'Removed {n} cla clauses from txt')
 
     # put in defaults if there is no YAML - allows easy creation of slides
@@ -120,17 +136,18 @@ def markdown_make_main(*argv):
         add_non_cla = True
 
     # insert_date function does NOT work for local-yaml builds
+    dt = ''
     if ydic.get('date', None):
         # print('Date tester: ', ydic['date'], ydic['date'][0])
         if ydic['date'][0].lower() in ['now', 'created', 'insert date', 'date']:
             # may or may not be in the text...
             if add_non_cla:
-                dt = '"Created {date:%Y-%m-%d %H:%M:%S}"'.format(date=datetime.datetime.now())
+                dt = '"Created {date:%Y-%m-%d %H:%M:%S.%f}"'.format(date=datetime.datetime.now()).rstrip('0')
                 print('Replacing date: now with (no yaml) ', dt)
                 ydic['date'] = [dt]
             else:
                 # this is a little fragile...
-                dt = 'date: "Created {date:%Y-%m-%d %H:%M:%S}"'.format(date=datetime.datetime.now())
+                dt = 'date: "Created {date:%Y-%m-%d %H:%M:%S.%f}"'.format(date=datetime.datetime.now())
                 print('Replacing date: now with ', dt)
                 txt = txt.replace('date: now', dt)
 
@@ -213,6 +230,14 @@ def markdown_make_main(*argv):
 
     debug_mode = ydic.get('debug', ['no'])[0].lower()
     # print(debug_mode)
+    dp(f'ready to execute\n{debug_mode}\n{ydic}\n{args}')
+
+    if making_book:
+        # create a batch file of the build, often handy to have
+        with open('make_last.bat', 'w', encoding='utf-8') as f:
+            f.write('REM Last build\n')
+            f.write(f'REM {dt}\n')
+            f.write(' '.join(args))
 
     if debug_mode not in ('quick', 'maketexformat'):
         print('EXECUTING MARKDOWN BUILD\n\n{:}\n'.format(' '.join(args)))
@@ -239,7 +264,9 @@ def markdown_make_main(*argv):
         # make tex format file based on this file
         # finds tex filename name looking in the pandoc template file
         # creates a tex file for the fmt by stripping the contents out of the calling program
+        print('making tex format...')
         args, template_name = remove_template(args, TEMP_FILE_NAME)
+        dp(f'Temp filename: {TEMP_FILE_NAME}')
         print('EXECUTING pandoc\n\n{:}\n'.format(' '.join(args)))
 
         p = subprocess.Popen(args, creationflags=CREATE_NO_WINDOW, stdout=subprocess.PIPE)
@@ -269,19 +296,23 @@ def markdown_make_main(*argv):
 def process_includes(txt, dn, color_includes, n_includes, file_map):
     """
     Iterative processing of include files
+    file_map looks for nnn_something.md files in the current directory
     dn = directory name
     """
-    includes = re.findall(r'@@@include (\.\./)?([0-9]{3}|[0-9A-Za-z])([^\n]+\.md)?', txt)
+    # changed pattern to allow importing nonmarkdown files, e.g. py sourcefiles
+    # but, WTF, is this re??
+    includes = re.findall(r'@@@include (\.\./)?([0-9]{3}|[0-9A-Za-z])([^\n]+\.[a-z]+)?', txt)
     # print(includes)
     for res_ in includes:
         original_match = res = ''.join(res_)
         # print(res_, file_map)
+        # res_[1] looks for nnn type files and tries to find them in file_map
         if res_[2] == '':
             res = file_map[res_[1]]
             # print(f'REPLACING {res_} with {res}')
         else:
             res = original_match
-            # print(f'using {res_} as {res}')
+            # print(f'using {"".join(res_)} as {res}')
         print(f'Importing {res}')
         n_includes += 1
         try:
@@ -320,6 +351,7 @@ def remove_template(args, output_file_name):
     # remove the arg to use template
     template_name = ''
     dir_name = ''
+    template_found = False
     for i in args:
         if i[0:10] == '--template':
             # print('FOUND')
@@ -329,8 +361,12 @@ def remove_template(args, output_file_name):
             dir_end = len(i) - i[::-1].find('/') - 1
             dir_name = i[eq_loc:dir_end]
             template_name = i[dir_end + 1:-4]
+            template_found = True
             # print(template_name)
             break
+    if not template_found:
+        raise ValueError('\n\n\nERROR: making template, need cla: --template=/template name... command line option!\nAborting.\n\n')
+        return
     args, trash = adjust_output_file(args, dir_name, output_file_name)
     return args, template_name
 
@@ -477,8 +513,8 @@ def insert_date(fn):
     with open(p, 'r', encoding='utf-8') as f:
         lines = f.readlines()
         if lines[0] == '---\n':
-            dt = 'date: "Created {date:%Y-%m-%d %H:%M:%S}"\n'.format(
-                date=datetime.datetime.now())
+            dt = 'date: "Created {date:%Y-%m-%d %H:%M:%S.%f}"\n'.format(
+                date=datetime.datetime.now()).rstrip('0')
             if lines[DATE_LINE].find('Created') >= 0 or lines[DATE_LINE].find('now') >= 0:
                 lines[DATE_LINE] = dt
                 print('Replacing date: now with ', dt)
@@ -514,7 +550,7 @@ def show_comments(txt):
                 open_groups = 0
                 # print('...close group')
             else:
-                raise ValueError('Close para group without open at line {}'.format(l))
+                raise ValueError('Close para group without open at line {}\nPrevious lines {}'.format(l, stext[i-3:i]))
             l = end
         else:
             if (l.find('<!--') >= 0 or l.find('-->') >= 0) and open_groups:
@@ -526,6 +562,11 @@ def show_comments(txt):
 
     return txt
 
+def update_book_bibfile():
+    print('Updating bibliography file...')
+    p_from = pathlib.Path('/s/telos/biblio/library.bib')
+    p_to = pathlib.Path('/s/telos/spectral_risk_measures_monograph/docs/library.bib')
+    shutil.copy(p_from, p_to)
 
 if __name__ == '__main__':
     markdown_make_main()
