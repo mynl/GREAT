@@ -1,6 +1,9 @@
 """
 DocMaker: persist exhibits and tables and make overall document
 
+For beamer styles, fonts, and colors see
+https://deic-web.uab.cat/~iblanes/beamer_gallery/individual/default-orchid-serif.html
+
 Uses sticb from CEA project
 
 Usage example
@@ -25,6 +28,7 @@ Usage example
 
 
 v 1.0 Dec 2019
+v 2.0 Dec 2020
 
 """
 
@@ -39,8 +43,10 @@ import logging
 import re
 import numpy as np
 import shutil
+from IPython.display import Markdown, display
 
-logger = logging.getLogger('aggdev.log')
+
+logger = logging.getLogger('aggregate')
 
 # import sys
 # import re
@@ -52,9 +58,20 @@ logger = logging.getLogger('aggdev.log')
 # import string
 # import unicodedata
 
+def default_ff(x):
+    try:
+        return f'{x:.4g}'
+    except:
+        return x
+
+def make_title(s):
+    s = s.replace('-', ' ').title()
+    for f, t in zip(['Var', 'Tvar', 'Cv', 'Vs', 'Epd', 'Lr', 'Roe'], ['VaR', 'TVaR', 'CV', 'vs.', 'EPD', 'LR', 'ROE']):
+        s = s.replace(f, t)
+    return s
 
 class DocMaker(object):
-    __yaml__ = """---
+    __yaml_doc__ = """---
 title: "{title}"
 author: Stephen J. Mildenhall
 date: "{created}"
@@ -78,9 +95,42 @@ debug: true
 
 """
 
+    __yaml_beamer__ = """---
+title: "{title}"
+author: Stephen J. Mildenhall
+date: "{created}"
+fontsize: {font_size}pt
+numbersections: {number_sections}
+outertheme : metropolis
+innertheme : metropolis
+fonttheme  : structurebold
+colortheme : orchid
+institute: \\convexmark
+classoption: t
+toc: true
+filter: pandoc-citeproc
+bibliography: /S/TELOS/biblio/library.bib
+csl: /S/TELOS/biblio/journal-of-finance.csl
+link-citations: {link_citations}
+header-includes:
+    - \\input{{/s/telos/common/newgeneral.tex}}
+cla: --standalone
+cla: -f markdown+smart+yaml_metadata_block+citations
+cla: --pdf-engine=xelatex
+cla: -o {file_format}
+cla: --filter pandoc-citeproc
+cla: -t {to_format}
+debug: true
+---
+
+
+"""
+
     def __init__(self, file_name, key='', title='DocMaker Document', to_format='latex',
-                 file_format='pdf', fig_format='pdf', output_style='with_table', tidy=False, back_up=True,
-                 label_prefix='', figure_dir='', table_dir='', unique_mode=False):
+                 file_format='pdf', fig_format='pdf', output_style='with_table',
+                 tidy=False, back_up=True, label_prefix='', figure_dir='',
+                 table_dir='', unique_mode=False, default_float_fmt=None,
+                 default_table_font_size=0):
         """
         file_name of output, including extension
 
@@ -100,7 +150,7 @@ debug: true
         :param file_name:
         :param key:           defaults to filename excl. the extension
         :param title:
-        :param to_format:
+        :param to_format: latex (doc) or beamer (puts in slide mode...)
         :param file_format:
         :param output_style: caption (caption in main doc just numbers in include),
                     in-line (all in main doc) or with_table (all in include file)
@@ -112,6 +162,7 @@ debug: true
                     to the vig name
                     figure_dir
                     table_dir over-ride defaults for figure and table outputs
+        :param default_table_font_size: float or zero, used as a custom font size
         """
 
         self.unique_mode = unique_mode
@@ -126,11 +177,15 @@ debug: true
         # just ability to generate a unique number so do not have to be careful labels are unique
         self._number = iter(range(10000))
         self.labels = []
+        if default_float_fmt is None:
+            self.default_float_fmt = default_ff
+        else:
+            self.default_float_fmt = default_float_fmt
         if key == '':
             key = self.key = self.file.stem
         else:
             self.key = key
-
+        self.default_table_font_size = default_table_font_size
 
         existing = list(self.file.parent.glob(f'**/{key}-*.*'))
         if len(existing):
@@ -168,8 +223,9 @@ debug: true
         else:
             self.figure_dir = Path(figure_dir)
         self.figure_dir.mkdir(parents=True, exist_ok=True)
+        self.table_dir_name = 'table'
         if table_dir == '':
-            self.table_dir = self.file.parent / 'table'
+            self.table_dir = self.file.parent / self.table_dir_name
         else:
             self.table_dir = Path(table_dir)
         self.table_dir.mkdir(parents=True, exist_ok=True)
@@ -177,7 +233,9 @@ debug: true
         self._off = False
 
     def make_unique(self, label):
-        """ for labelling exhibits uniquely """
+        """ for labeling exhibits uniquely """
+        label = label.replace(' - ', '-').replace(' ', '-')
+        label = re.sub('[,.;:]', '', label)
         if self.unique_mode:
             if label in self.labels:
                 label = f'{label}-{next(self._number)}'
@@ -197,6 +255,10 @@ debug: true
     def off(self):
         return self._off
 
+    @off.setter
+    def off(self, value):
+        self._off = value
+
     @staticmethod
     def _date_():
         return "Created {date:%Y-%m-%d %H:%M:%S}". \
@@ -207,6 +269,9 @@ debug: true
 
     def print_buffer(self):
         print(self.get_buffer())
+
+    def display_buffer(self):
+        display(Markdown(self.get_buffer()))
 
     def include_source(self, file_name):
         """
@@ -231,19 +296,29 @@ debug: true
 
 ''')
 
-    def write_markdown(self, font_size, margin):
+    def write_markdown(self, font_size=12, margin=0, show=False):
         """
         persist and write out the StringIO cache to a physical file
         """
-        yaml = self.__yaml__.format(
-            title=self.title, created=self._date_(),
-            font_size=font_size, margin=margin,
-            number_sections="true", link_citations="true",
-            to_format=self.to_format, file_format=self.file_format)
+        if self.to_format == 'latex':
+            yaml = self.__yaml_doc__.format(
+                title=self.title, created=self._date_(),
+                font_size=font_size, margin=margin,
+                number_sections="true", link_citations="true",
+                to_format=self.to_format, file_format=self.file_format)
+        elif self.to_format == 'beamer':
+            yaml = self.__yaml_beamer__.format(
+                title=self.title, created=self._date_(),
+                font_size=font_size,
+                number_sections="true", link_citations="true",
+                to_format=self.to_format, file_format=self.file_format)
 
         with self.file.open('w', encoding='UTF-8') as f:
             f.write(yaml)
             f.write(self.sio.getvalue())
+
+        if show:
+            display(Markdown(self.file.open('r').read()))
 
     def process(self, font_size=10, margin=1, over_write=True):
         """
@@ -282,6 +357,7 @@ debug: true
         """
         self.sio.write(txt)
         self.sio.write('\n\n')
+        display(Markdown(txt))
 
     def section(self, txt):
         self.sio.write(f'# {txt}\n\n')
@@ -289,7 +365,7 @@ debug: true
     def subsection(self, txt):
         self.sio.write(f'## {txt}\n\n')
 
-    def figure(self, f, label, caption="", size="", **kwargs):
+    def figure(self, f, label, caption="", size="", new_slide=True, **kwargs):
         """
         add a figure
         if f is a Figure it is used directly
@@ -307,7 +383,8 @@ debug: true
                 print(f'Cannot coerce input object {f} into a figure...ignoring')
                 raise ae
 
-        # do not want the prefix to be used in the file name, just the internal lable
+        # do not want the prefix to be used in the file name, just the internal label
+        slide_caption = label.replace('-', ' ')
         label = self.make_unique(label)
         fig_file = self.figure_dir / f'{self.key}-{label}.{self.fig_format}'
         fig_file_local = f'img/{self.key}-{label}.{self.fig_format}'
@@ -315,6 +392,7 @@ debug: true
         label = f'{self.label_prefix}{label}'
 
         # clean label
+        slide_caption = make_title(label)
         label = self.clean_name(label)
 
         # not the caption, that can contain tex
@@ -330,7 +408,14 @@ debug: true
         fig_text += f']({fig_file_local})'
         if size != '':
             fig_text += f'{{{size}}}'
+        if caption == '':
+            # suppresses "Figure" in pandoc
+            # https://stackoverflow.com/questions/45030895/how-to-add-an-image-with-alt-tag-but-without-caption-in-pandoc
+            fig_text += '  \\'
         fig_text += '\n\n'
+        if self.to_format == 'beamer' and new_slide:
+            self.sio.write(f'## {slide_caption}\n\n')
+            display(Markdown(f'## {slide_caption}'))
         self.sio.write(fig_text)
 
     def wide_table(self, df, label, caption="", nparts=2,
@@ -402,23 +487,29 @@ debug: true
 
         for i, b in enumerate(range(0, cols, cols_per_part)):
             bit = df.iloc[:, b:b + cols_per_part]
-            lbl = f'{self.label_prefix}{label}-{i}-of-{nparts}'
+            lbl = f'{self.label_prefix}{label}'
             if i == 0:
-                c = f"{caption} Part {i+1} of {nparts}."
+                c ='' #  f"Table {label.replace('-', ' ')}"
             else:
-                c = f"Table {label.replace('-', ' ')} continued, part {i+1} of {nparts}"
+                c = ''
+            # if i == 0:
+            #     c = f"{caption} Part {i+1} of {nparts}."
+            # else:
+            #     c = f"Table {label.replace('-', ' ')} continued, part {i+1} of {nparts}"
             display(
                 self.table(bit, lbl,
                         caption=c,
                         float_format=float_format, fill_nan=fill_nan,
-                        here=here, font_size=font_size, sideways=True, custom_font_size=custom_font_size,
+                        here=here, font_size=font_size, sideways=self.to_format=='latex',
+                        custom_font_size=custom_font_size, multipart=i,
                         sparsify=False, force_float=False, output_style='with_table', **kwargs)
                      )
 
     def table(self, df, label, caption="",
               float_format=None, fill_nan='',
               here='', font_size='', sideways=False, custom_font_size=0.0,
-              sparsify=False, force_float=False, output_style='default', **kwargs):
+              sparsify=False, force_float=False, output_style='default',
+              multipart=0, new_slide=True, **kwargs):
         r"""
         Add a table
         label used as file name
@@ -441,6 +532,8 @@ debug: true
         font_size = scriptsize, footnotesize etc.
 
         label and columns have _ escaped for TeX but the caption is not - so beware!
+
+        multipart=True for widetable, then skip the beamer caption
 
         Test Cases
         ==========
@@ -487,8 +580,8 @@ debug: true
         :param fill_nan:
         :param here:
         :param font_size:
-        :param custom_font_size:  e.g.  input the size 0.15, second size will be scaled up appropriately. Overrides font_size
-        \fontsize{0.15cm}{0.170cm}\selectfont
+        :param custom_font_size:  e.g.  input the size 0.15, second size will
+            be scaled up appropriately. Overrides font_size. \fontsize{0.15cm}{0.170cm}\selectfont
         :param sideways:
         :param sparsify:
         :param force_float:
@@ -511,14 +604,9 @@ debug: true
             output_style = self.output_style
 
         # will want a much better approach!
-        def default_ff(x):
-            try:
-                return f'{x:.4g}'
-            except:
-                return x
 
         if float_format is None:
-            float_format = default_ff
+            float_format = self.default_float_fmt
 
         df = df.copy()
         if force_float:
@@ -526,7 +614,11 @@ debug: true
 
         # have to handle column names that may include _
         # For now assume there are not TeX names
-        label = self.make_unique(label)
+        slide_caption = make_title(label)
+        if multipart:
+            label = self.make_unique(label + str(multipart))
+        else:
+            label = self.make_unique(label)
         label_fn = self.clean_name(label)
         label = f'{self.label_prefix}{label_fn}'
 
@@ -548,7 +640,10 @@ debug: true
         else:
             ends_font_size = ''
         if custom_font_size:
-            font_size = f'\\fontsize{{{custom_font_size}cm}}{{{18/15*custom_font_size}cm}}\\selectfont\n'
+            font_size = f'\\fontsize{{{custom_font_size}cm}}{{{custom_font_size}cm}}\\selectfont\n'
+            ends_font_size = '\\normalsize\n'
+        elif self.default_table_font_size:
+            font_size = f'\\fontsize{{{self.default_table_font_size}cm}}{{{self.default_table_font_size}cm}}\\selectfont\n'
             ends_font_size = '\\normalsize\n'
         else:
             ends_font_size = ''
@@ -559,12 +654,21 @@ debug: true
         else:
             tt = 'table'
 
-        s_md_pre = f'\n\\begin{{{tt}}}{here}\n{font_size}\\caption{{{caption}}}\n\\label{{tab:{label}}}\n'
-        s_table = f'\medskip\n\\centering\n{s}'
+        s_md_pre = f'\n\\begin{{{tt}}}{here}\n{font_size} %\n'
+        if caption != '':
+            s_md_pre += f'\\caption{{{caption}}}\n'
+        if label != '':
+            s_md_pre += f'\\label{{tab:{label}}}\n'
+
+        s_table = f'\\medskip\n\\centering\n{s}'
         s_md_post = f'{ends_font_size}\\end{{{tt}}}\n\n'
 
         table_file = self.table_dir / f'{self.key}-{label_fn}.md'
-        table_file_local = f'tables/{self.key}-{label_fn}.md'
+        table_file_local = f'{self.table_dir_name}/{self.key}-{label_fn}.md'
+
+        if not multipart and self.to_format == 'beamer' and new_slide:
+            self.sio.write(f'## {slide_caption}\n\n')
+            display(Markdown(f'## {slide_caption}'))
 
         if output_style == 'caption':
             with table_file.open('w', encoding='utf-8') as f:
@@ -589,7 +693,7 @@ debug: true
         else:
             raise ValueError(f'Unknown option {output_style} for output_style passed to table.')
 
-        return df.style.format(float_format)
+        display(df.style.format(float_format))
 
     @staticmethod
     def clean_name(n):

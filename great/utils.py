@@ -268,7 +268,7 @@ class FigureManager():
         if figsize is None:
             figsize = self.default_figsize
 
-        f, axs = plt.subplots(nr, nc, figsize=figsize, constrained_layout=True, squeeze=False)
+        f, axs = plt.subplots(nr, nc, figsize=figsize, constrained_layout=True, squeeze=False, **kwargs)
         for ax in axs.flat:
             if xfmt[0] != 'd':
                 FigureManager.easy_formatter(ax, which='x', kind=xfmt, places=places,

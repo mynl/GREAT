@@ -36,9 +36,10 @@ LOCAL_YAML = 'local_build.yaml'  # name of default yaml files for empty headers
 def markdown_make_main(*argv):
     """
     When called from ST3 argv will be like
-    ['\\s\\tbd\\python\\Markdown_Make.py', 'C:\\S\\Teaching\\2018-01\\ACT3349\\Notes\\Final.md', 'Final']
-    When called internally (as a burst) may also include ydic which is then used as the spec for all builds
-    first arg is the name of this script
+    ['\\s\\tbd\\python\\Markdown_Make.py',
+    'C:\\S\\Teaching\\2018-01\\ACT3349\\Notes\\Final.md', 'Final']
+    When called internally (as a burst) may also include ydic which is then
+    used as the spec for all builds first arg is the name of this script
     second arg is the full name of the file being processes
     third arg is the stripped name of the file.
 
@@ -51,10 +52,11 @@ def markdown_make_main(*argv):
     This batch file is responsible for setting command line arg_dict
     Args you want set are prefixed with clarg:
 
-    Pass through command line arg_dict specified in yaml with cla (command line argument)
-    xcla will be ignored
+    Pass through command line arg_dict specified in yaml with cla
+    (command line argument) xcla will be ignored
 
-    format files: will be specified in the templates...so there will be a sjm-beamer-template which will refer to the right fmt file etc.
+    format files: will be specified in the templates...so there will be a
+    sjm-beamer-template which will refer to the right fmt file etc.
     to and from formats are specified in the cla
 
     there is no include-header - all these options are in the base yaml
@@ -63,14 +65,17 @@ def markdown_make_main(*argv):
 
     will keep debug
 
-    burst: true/false, build burst true/false, output directory default is c temp burst (which has img and pdf)
-    creating link: > mklink /j img c:\s\telos\notes\img
+    burst: true/false, build burst true/false, output directory default is c
+    temp burst (which has img and pdf)
+    creating link: > mklink /j img c:\\s\\telos\\notes\\img
 
-    if there is no YAML at the top looks up the directory tree for a file called LOCAL_YAML
-    and uses that in place.
+    if there is no YAML at the top looks up the directory tree for a file
+    called LOCAL_YAML and uses that in place.
 
-    mode = quick: run pandoc and then pdflatex separately (avoids multiple runs); if there is a template
-    it is used via a first line %&/s/telos/common/sjm-doc-template taken from the YAML
+    mode = quick: run pandoc and then pdflatex separately (avoids multiple
+    runs); if there is a template
+    it is used via a first line %&/s/telos/common/sjm-doc-template taken from
+    the YAML
 
     :param argv:
     :return:
