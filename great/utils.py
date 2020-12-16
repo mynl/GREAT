@@ -12,6 +12,7 @@ import matplotlib.ticker as ticker
 import matplotlib as mpl
 from cycler import cycler
 from itertools import product
+from io import StringIO
 import math
 from numpy import floor
 
@@ -19,7 +20,7 @@ from numpy import floor
 from IPython import get_ipython
 from IPython.core import magic_arguments
 from IPython.core.magic import line_magic, cell_magic, line_cell_magic, Magics, magics_class
-
+from IPython.core.magic_arguments import argument, magic_arguments, parse_argstring
 
 def checksum(ob):
     """
@@ -388,36 +389,25 @@ class GreatMagics(Magics):
     """
 
     @cell_magic
-#     @magic_arguments.magic_arguments()
-#     @magic_arguments.argument('--verbose', '-v',
-#           help='Print expanded text results')
-#     @magic_arguments.argument('-h',
-#           action='store_true',
-#           help='specify individual height')
-#     @magic_arguments.argument('-w',
-#           action='store_true',
-#           help='specify individual width')
     def sf(self, line='', cell=None):
         """
-        s[m]f[ig] 1 2 -w
+        s[m]f[ig] nr nc [w h] [v] [k ...
+            nr x nc layout
+            w x h of individual plots
+            v = verbose, prepend the magically added coded
+            k .... keyword args passed to smfig, e.g., sharex, sharey, etc.
         """
-#         args = magic_arguments.parse_argstring(self.sf, line)
-#         if args.h is None:
-#             hh = args.h
-#         else:
-#             hh = 3.25
-
-#         if args.w is None:
-#             ww = 4.0
-#         else:
-#             ww = args.w
 
         ww, hh = 4, 3.25
         verbose = False
-        if line != '':
-            if line.find('v') >= 0:
-                verbose = True
-                line = line.replace('v', '').strip()
+        kwargs = ''
+        if line != '' and line.find('k') >= 0:
+            pos = line.find('k')
+            kwargs = line[pos+1:].strip()
+            line = line[:pos].strip()
+        if line != '' and line.find('v') >= 0:
+            verbose = True
+            line = line.replace('v', '').strip()
         if line != '':
             ls = line.replace(',', ' ').split()
             nr = int(ls[0])
@@ -433,14 +423,55 @@ class GreatMagics(Magics):
 
         if nr * nc == 1:
             ax = 'ax = ax0 = axs\n'
+            s = f'f, axs = smfig({nr}, {nc}, ({w}, {h}), {kwargs})\n{ax}\n\n{cell}'
         else:
-            ax = ",".join([f'ax{i}' for i in range(nr*nc)]) + ' = axs.flat\n'
-
-        s = f'f, axs = smfig({nr}, {nc}, ({w}, {h}))\n{ax}{cell}'
+            ax = ",".join([f'ax{i}' for i in range(nr*nc)]) + ' = axs.flat'
+            axi = "axi = iter(axs.flat)"
+            s = f'f, axs = smfig({nr}, {nc}, ({w}, {h}), {kwargs})\n{ax}\n{axi}\n\n{cell}'
         if verbose:
             print(s)
 
         self.shell.ex(s)
+
+    @cell_magic
+    @magic_arguments()
+    @argument('-o', '--output', help='Output variable name ')
+    def smcsv(self, line, cell):
+        """
+        Parse csv stream into DataFrame
+
+
+        :param line:
+        :param cell:
+        :return:
+        """
+        args = parse_argstring(self.smcsv, line)
+        sio = StringIO(cell)
+        df = pd.read_csv(sio)
+        if args.output is None:
+            return df
+        else:
+            self.shell.user_ns[args.output] = df
+            return f'{len(df)} rows stored in variablce {args.output}'
+
+    @line_magic
+    def sdir(self, line=''):
+        """
+        run sdir on the object in line, if '' returns self
+        e.g., %sdir shell to run on shell to see what shell can do.
+        %sdir to see what objects are available
+        """
+        if line=='':
+            x = self
+        else:
+            x = getattr(self, line, None)
+        if x:
+            ml = max(map(len, dir(x)))
+            fs = f'{{i:<{ml}s}}'
+            print('\t'.join([fs.format(i=i) for i in dir(x) if i[0] != '_']))
+
+
+
 
 ip = get_ipython()
 ip.register_magics(GreatMagics)
