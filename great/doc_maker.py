@@ -39,14 +39,15 @@ from matplotlib.pyplot import Figure
 import pandas as pd
 import datetime
 from .markdown_make import markdown_make_main
-import logging
+from .utils import logger
+# import logging
 import re
 import numpy as np
 import shutil
 from IPython.display import Markdown, display
 
 
-logger = logging.getLogger('aggregate')
+# logger = logging.getLogger('aggregate')
 
 # import sys
 # import re

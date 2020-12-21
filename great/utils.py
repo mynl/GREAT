@@ -13,14 +13,23 @@ import matplotlib as mpl
 from cycler import cycler
 from itertools import product
 from io import StringIO
-import math
-from numpy import floor
-
+from pathlib import Path
+# import math
+# from numpy import floor
 # for magics
 from IPython import get_ipython
-from IPython.core import magic_arguments
-from IPython.core.magic import line_magic, cell_magic, line_cell_magic, Magics, magics_class
+from IPython.core.magic import line_magic, cell_magic, Magics, magics_class
 from IPython.core.magic_arguments import argument, magic_arguments, parse_argstring
+from datetime import datetime
+import logging
+
+logger = logging.getLogger('aggregate')
+
+
+
+def now():
+    return 'Created {date:%Y-%m-%d %H:%M:%S.%f}'.format(date=datetime.now()).rstrip('0')
+
 
 def checksum(ob):
     """
@@ -236,7 +245,7 @@ class FigureManager():
             else:
                 props.append(cycler('color', [default_colors[0]] * len(default_ls)))
             if 'w' in cycle:
-                if type(ls) == int:
+                if type(lw) == int:
                     props.append(cycler('linewidth', [lw] * len(default_colors)))
                 else:
                     props.append(cycler('linewidth', lw))
@@ -469,7 +478,6 @@ class GreatMagics(Magics):
             ml = max(map(len, dir(x)))
             fs = f'{{i:<{ml}s}}'
             print('\t'.join([fs.format(i=i) for i in dir(x) if i[0] != '_']))
-
 
 
 

@@ -23,6 +23,7 @@ import unicodedata
 import datetime
 import pathlib
 import shutil
+import re
 
 # for MarkdownMake
 CREATE_NO_WINDOW = 0x08000000
@@ -38,6 +39,7 @@ def markdown_make_main(*argv):
     When called from ST3 argv will be like
     ['\\s\\tbd\\python\\Markdown_Make.py',
     'C:\\S\\Teaching\\2018-01\\ACT3349\\Notes\\Final.md', 'Final']
+
     When called internally (as a burst) may also include ydic which is then
     used as the spec for all builds first arg is the name of this script
     second arg is the full name of the file being processes
@@ -87,8 +89,6 @@ def markdown_make_main(*argv):
 
     print('RUNNING DOCMAKER VERSION ' * 5)
 
-    PATTERN = re.compile(r'''((?:[^:"']|"[^"]*"|'[^']*')+)''')
-    yaml = False
 
     if len(argv) == 0:
         argv = sys.argv
@@ -106,6 +106,8 @@ def markdown_make_main(*argv):
     # fix the date
     insert_date(argv[1])
 
+    PATTERN = re.compile(r'''((?:[^:"']|"[^"]*"|'[^']*')+)''')
+    yaml = False
     with open(argv[1], 'r', encoding='UTF-8') as g:
         txt = g.read()
         g.seek(0)
@@ -117,6 +119,7 @@ def markdown_make_main(*argv):
                 break
             # need to only find the first :, beware : in quotes...
             s = PATTERN.split(l)[1::2]
+            # beware here: this fucks up if there is a colon on the right...change PATTERN?
             if len(s) == 2:
                 # here we are going to catch -o XXX because easier than doing later
                 ans = s[1].strip()
@@ -141,13 +144,12 @@ def markdown_make_main(*argv):
         add_non_cla = True
 
     # insert_date function does NOT work for local-yaml builds
-    dt = ''
+    dt = '"Created {date:%Y-%m-%d %H:%M:%S.%f}"'.format(date=datetime.datetime.now()).rstrip('0')
     if ydic.get('date', None):
         # print('Date tester: ', ydic['date'], ydic['date'][0])
         if ydic['date'][0].lower() in ['now', 'created', 'insert date', 'date']:
             # may or may not be in the text...
             if add_non_cla:
-                dt = '"Created {date:%Y-%m-%d %H:%M:%S.%f}"'.format(date=datetime.datetime.now()).rstrip('0')
                 print('Replacing date: now with (no yaml) ', dt)
                 ydic['date'] = [dt]
             else:
@@ -242,7 +244,11 @@ def markdown_make_main(*argv):
         with open('make_last.bat', 'w', encoding='utf-8') as f:
             f.write('REM Last build\n')
             f.write(f'REM {dt}\n')
-            f.write(' '.join(args))
+            out = ' '.join(args)
+            f.write(out)
+            f.write(f'\nREM TeX Output: uncomment next line\n')
+            f.write('REM ')
+            f.write(re.sub(r'\\pdf\\(.*)\.pdf', r'\1.tex', out))
 
     if debug_mode not in ('quick', 'maketexformat'):
         print('EXECUTING MARKDOWN BUILD\n\n{:}\n'.format(' '.join(args)))

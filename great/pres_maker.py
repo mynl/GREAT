@@ -41,7 +41,7 @@ from matplotlib.pyplot import Figure
 import pandas as pd
 import datetime
 from .markdown_make import markdown_make_main
-import logging
+from .utils import logger
 import re
 import numpy as np
 import unicodedata
@@ -51,8 +51,6 @@ from IPython.display import Markdown, display
 from IPython.core.magic import Magics, magics_class, line_magic, cell_magic, line_cell_magic
 from IPython.core.magic_arguments import argument, magic_arguments, parse_argstring
 from IPython import get_ipython
-
-logger = logging.getLogger('aggregate')
 
 # import sys
 # import re
@@ -96,9 +94,9 @@ debug: true
 
 """
 
-    def __init__(self, title, key, *, file_name='',
+    def __init__(self, title, key, *, file_name='', base_dir='notes',
                  fig_format='pdf', output_style='with_table',
-                 default_float_fmt=None,
+                 default_float_fmt=None, tidy=True,
                  default_table_font_size=0.15):
         """
         file_name of output, including extension
@@ -115,6 +113,7 @@ debug: true
         are deleted. This is the recommended approach and is the default if key is ''.
 
         :param file_name:
+        :param base_dir: where to store output, default ./notes
         :param key:  prepended to file names to cluster them. Should be unique to the doc.
         :param title:
         :param fig_format:
@@ -140,10 +139,11 @@ debug: true
         self.default_table_font_size = default_table_font_size
 
         # main file for output and ancillary directories
-        self.base_dir = Path('notes')
+        self.base_dir = Path(base_dir)
+        print(self.base_dir, self.base_dir.exists())
         self.file = self.base_dir / self.file_name
-        logger.info(f'using base dir {self.base_dir.absolute()}')
-        logger.info(f'using filename {self.file}')
+        logger.info(f'base_dir = {self.base_dir.absolute()}')
+        logger.info(f'output filename = {self.file}')
         self.base_dir.mkdir(parents=True, exist_ok=True)
         self.out_dir = self.base_dir / 'pdf'
         self.out_dir.mkdir(parents=True, exist_ok=True)
@@ -155,13 +155,16 @@ debug: true
         self.appendix = -1
 
         # tidy up
-        self.tidy_up()
+        if tidy:
+            self.tidy_up()
 
         # output
         self.toc = []
+        self._slides = set()
         self.sios = {'contents': StringIO(), 'summary': StringIO(), 'body': StringIO(), 'appendix' : StringIO()}
 
-        self.sios['contents'].write('## Contents\n')
+        # start with toc header
+        self._write_buffer_('contents', '## Contents\n')
 
         # starts active
         self._active = True
@@ -185,7 +188,7 @@ debug: true
         """
         if buf == 'body':
             self.section += 1
-            return f'Section {self.section: 2d}. '
+            return f'Section {self.section: >2d}. '
         elif buf == 'summary':
             return ''
         elif buf == 'appendix':
@@ -195,9 +198,11 @@ debug: true
         else:
             raise ValueError('Hopeless confusion!')
 
-    def text(self, txt, buf='body', tacit=False):
+    def text(self, txt, buf='body', tacit=False, debug=False):
         """
         add text to buffer
+
+        only text function can create new sections
 
         """
         if not self.active:
@@ -209,14 +214,17 @@ debug: true
             m = re.findall('^# (.*)', ln)
             if m:
                 s = self.section_number(buf)
-                ln = f"# {s} {self.make_title(m[0])}"
-                toc_ln = f"* {s} {self.make_title(m[0])}"
+                tl = self.make_title(m[0])
+                ln = f"# {s} {tl}"
                 stxt[i] = ln
-                self.toc.append(toc_ln)
+                self.toc.append((s, tl))
 
         txt = '\n'.join(stxt)
-        self.sios[buf].write(txt)
-        self.sios[buf].write('\n\n')
+        self._write_buffer_(buf, txt)
+        self._write_buffer_(buf, '\n\n')
+        if debug:
+            (self.base_dir / 'dm.md').open('w', encoding='utf=8').write(txt)
+            # if not linux build it?!
         if not tacit:
             display(Markdown(txt))
 
@@ -280,13 +288,13 @@ debug: true
             fig_text += '  \\'
         fig_text += '\n\n'
         if new_slide and not promise:
-            self.sios[buf].write(f'## {slide_caption}\n\n')
+            self._write_buffer_(buf, f'## {slide_caption}\n\n')
             if not tacit:
                 display(Markdown(f'## {slide_caption}'))
         if promise:
             return fig_text
         else:
-            self.sios[buf].write(fig_text)
+            self._write_buffer_(buf, fig_text)
 
         if not tacit:
             display(Markdown(fig_text))
@@ -436,26 +444,23 @@ debug: true
         table_file = self.table_dir / f'{self.key}-{label}{suffix}.md'
         table_file_local = f'table/{self.key}-{label}{suffix}.md'
 
-        # pick up the correct output buffer
-        sio = self.sios[buf]
-
         if new_slide and not promise:
-            sio.write(f'## {slide_caption}\n\n')
+            self._write_buffer_(buf, f'## {slide_caption}\n\n')
             if not tacit:
                 display(Markdown(f'## {slide_caption}'))
 
         if self.output_style == 'caption':
             with table_file.open('w', encoding='utf-8') as f:
-                f.write('\n')
-                f.write(s_table)
-            sio.write(s_md_pre)
-            sio.write(f'\n@@@include {table_file_local}\n\n')
-            sio.write(s_md_post)
+                self._write_buffer_(buf, '\n')
+                self._write_buffer_(buf, s_table)
+            self._write_buffer_(buf, s_md_pre)
+            self._write_buffer_(buf, f'\n@@@include {table_file_local}\n\n')
+            self._write_buffer_(buf, s_md_post)
 
         elif (self.output_style == 'inline') or (self.output_style == 'in-line'):
-            sio.write(s_md_pre)
-            sio.write(s_table)
-            sio.write(s_md_post)
+            self._write_buffer_(buf, s_md_pre)
+            self._write_buffer_(buf, s_table)
+            self._write_buffer_(buf, s_md_post)
 
         elif self.output_style == 'with_table':
             with table_file.open('w', encoding='utf-8') as f:
@@ -465,7 +470,7 @@ debug: true
             if promise:
                 return f'@@@include {table_file_local}\n\n'
             else:
-                sio.write(f'@@@include {table_file_local}\n\n')
+                self._write_buffer_(buf, f'@@@include {table_file_local}\n\n')
 
         else:
             raise ValueError(f'Unknown option {self.output_style} for output_style passed to table.')
@@ -512,6 +517,88 @@ debug: true
         if promise:
             return '\n'.join(ans)
 
+    def tikz_table(self, df, label, *, caption="", buf='body',
+                   new_slide=True, tacit=False, promise=False,
+                   float_format=None, tabs=None,
+                   show_index=True, scale=0.717,
+                   figure='figure', hrule=None,
+                   vrule=None, sparsify=1):
+        """
+
+        Add a table using TikZ formatter
+
+        label used as file name
+        force_float = convert input to float first (makes a copy) for col alignment
+
+        output_style as table
+            with_table : all output in @@@ file and include in main md file; use when caption is generic
+            caption:   puts caption text in the main markdown file, use when caption will be edited
+            inline: all output in md file directly (not recommended)
+
+        label and columns have _ escaped for TeX but the caption is not - so beware!
+
+        fn_out=None, float_format=None, tabs=None,
+                show_index=True, scale=0.717, height=1.5, column_sep=2, row_sep=0,
+                figure='figure', color='blue!0', extra_defs='', lines=None,
+                post_process='', label='', caption=''
+
+        """
+
+        assert not promise or self.output_style == 'with_table'
+
+        if not self.active:
+            if not tacit:
+                display(df)
+            return
+
+        if float_format is None:
+            float_format = self.default_float_fmt
+
+        df = df.copy()
+        df = df.astype(float, errors='ignore')
+
+        # have to handle column names that may include _
+        # For now assume there are not TeX names
+        slide_caption = self.make_title(label)
+        label = self.make_safe_label(label)
+        label = self.clean_name(label)
+
+        # check the caption, that can contain tex
+        if not self.clean_underscores(caption):
+            logger.warning('Caption contains unescaped underscores _. You must ensure they are in dollars.')
+
+        # do the work
+        s_table = df_to_tikz(df, label=label, caption=caption,
+                             float_format=float_format, tabs=tabs,
+                             show_index=show_index, scale=scale,
+                             figure=figure, hrule=hrule, vrule=vrule, sparsify=sparsify, clean_index=True)
+
+        table_file = self.table_dir / f'{self.key}-{label}.md'
+        print(table_file.absolute())
+        table_file_local = f'table/{self.key}-{label}.md'
+
+        if new_slide and not promise:
+            self._write_buffer_(buf, f'## {slide_caption}\n\n')
+            if not tacit:
+                display(Markdown(f'## {slide_caption}'))
+
+        if (self.output_style == 'inline') or (self.output_style == 'in-line'):
+            self._write_buffer_(buf, s_table)
+
+        elif self.output_style == 'with_table':
+            with table_file.open('w', encoding='utf-8') as f:
+                f.write(s_table)
+            if promise:
+                return f'@@@include {table_file_local}\n\n'
+            else:
+                self._write_buffer_(buf, f'@@@include {table_file_local}\n\n')
+
+        else:
+            raise ValueError(f'Unknown option {self.output_style} for output_style passed to table.')
+
+        if not tacit:
+            display(df.style.format(float_format))
+
     @staticmethod
     def default_float_format(x, neng=3):
         """
@@ -527,7 +614,9 @@ debug: true
         """
         ef = EngFormatter(neng, True)
         try:
-            if abs(x) >= 1e-3 and abs(x) < 1e6:
+            if x == 0:
+                ans = '0'
+            elif 1e-3 <= abs(x) < 1e6:
                 if abs(x) <= 10:
                     ans = f'{x:.3g}'
                 elif abs(x) < 100:
@@ -552,8 +641,8 @@ debug: true
         """
         s = s.replace('-', ' ').title()
         # from / to
-        for f, t in zip(['Var', 'Tvar', 'Cv', 'Vs', 'Epd', 'Lr', 'Roe'],
-                        ['VaR', 'TVaR', 'CV', 'vs.', 'EPD', 'LR', 'ROE']):
+        for f, t in zip(['Var', 'Tvar', 'Cv', 'Vs', 'Epd', 'Lr', 'Roe', 'Cle'],
+                        ['VaR', 'TVaR', 'CV', 'vs.', 'EPD', 'LR', 'ROE', 'CLE']):
             s = s.replace(f, t)
         return s
 
@@ -575,9 +664,37 @@ debug: true
         https://stackoverflow.com/questions/295135/turn-a-string-into-a-valid-filename
         """
         value = unicodedata.normalize('NFKD', label)
-        value = re.sub('[^\w\s-]', '', value).strip().lower()
-        value = re.sub('[-\s]+', '-', value)
+        value = re.sub(r'[^\w\s-]', '', value).strip().lower()
+        value = re.sub(r'[-\s]+', '-', value)
         return value
+
+    def _write_buffer_(self, buf, text='\n'):
+        """
+        single point to write to buffer, allows overloading of other write related functions, such as tracking toc
+        and making a tree diagram of the document
+
+        not to be called externally, hence name
+
+        :param buf:
+        :param text:
+        :return:
+        """
+        # find the sections and add labels
+        sections = re.findall('^(## .+)', text, re.MULTILINE)
+        for slide_heading in sections:
+            if slide_heading not in self._slides:
+                # label the first occurrence of each slide name
+                self._slides.add(slide_heading)
+                new_text = f'{slide_heading} \\label{{slide:{self.make_safe_label(slide_heading[3:])}}}\n'
+                # count = 1: only replace the first occurrence
+                text = text.replace(slide_heading, new_text, 1)
+                logger.info(f'New section>> {new_text[:-1]}')
+        # actually write the text
+        self.sios[buf].write(text)
+
+    @property
+    def slides(self):
+        return self._slides
 
     def tidy_up(self):
         """
@@ -611,11 +728,16 @@ debug: true
         """
         # new SIO each time for contents...
         self.sios['contents'] = StringIO()
-        toc_summary = sorted([i for i in self.toc if i[2:].split()[0].strip() not in ('Appendix', 'Section')])
-        toc_body = sorted([i for i in self.toc if i[2:].split()[0].strip() == 'Section'])
-        toc_appendix = sorted([i for i in self.toc if i[2:].split()[0].strip() == 'Appendix'])
-        self.sios['contents'].write('# Table of Conents\n## Contents\n\\footnotesize\n\n')
-        self.sios['contents'].write('\n'.join(toc_summary + toc_body + toc_appendix))
+        sort_fun = lambda x : x[0]
+        toc_summary = sorted([i for i in self.toc if i[0].split()[0].strip() not in ('Appendix', 'Section')],
+                             key=sort_fun)
+        toc_body = sorted([i for i in self.toc if i[0].split()[0].strip() == 'Section'],
+                          key=sort_fun)
+        toc_appendix = sorted([i for i in self.toc if i[0].split()[0].strip() == 'Appendix'],
+                              key=sort_fun)
+        self.sios['contents'].write('# Table of Conents\n## Contents\n\n')
+        for s, c in toc_summary + toc_body + toc_appendix:
+            self.sios['contents'].write(f'\n\\tocentry{{{s}}}{{{c}}}')
         return '\n\n'.join(buf.getvalue() for buf in self.sios.values())
 
     def buffer_display(self):
@@ -698,7 +820,10 @@ debug: true
         :param df:
         :return:
         """
-        # columns
+
+        idx_names = df.index.names
+        col_names = df.columns.names
+
         if isinstance(df.columns, pd.core.indexes.multi.MultiIndex):
             df.columns = PresentationManager.clean_mindex_work(df.columns)
         else:
@@ -709,7 +834,8 @@ debug: true
             df.index = PresentationManager.clean_mindex_work(df.index)
         else:
             df.index = map(PresentationManager.clean_name, df.index)
-
+        df.index.names = idx_names
+        df.columns.names = col_names
         return df
 
     @staticmethod
@@ -732,10 +858,11 @@ class PresentationManagerMagic(Magics):
 
     @line_cell_magic
     @magic_arguments('%pmb')
-    @argument('-t', '--tacit', action='store_true', help='Tacit: suppress output as Markdown')
     @argument('-a', '--appendix', action='store_true', help='Mark as appendix material.')
-    @argument('-s', '--summary', action='store_true', help='Mark as summary material (exlusive with appendix).')
+    @argument('-d', '--debug', action='store_true', help='Save blob to dm.md in notes folder for debugging.')
     @argument('-f', '--fstring', action='store_true', help='Convert cell into f string and evaluate.')
+    @argument('-t', '--tacit', action='store_true', help='Tacit: suppress output as Markdown')
+    @argument('-s', '--summary', action='store_true', help='Mark as summary material (exlusive with appendix).')
     def pmb(self, line='', cell=None):
         """
         PresentationManager blob (text/write) line/cell magic
@@ -744,6 +871,7 @@ class PresentationManagerMagic(Magics):
         %%pmt -s -a -m  (s show; a=appendix, m=suMmary)
 
         """
+
         if cell is None:
             # defaults, tacit for everything except sections
             if line.strip()[0:2] == '# ':
@@ -761,17 +889,17 @@ class PresentationManagerMagic(Magics):
                 logger.info('evaluating as f string')
                 temp = f'f"""{cell}"""'
                 cell = self.shell.ev(temp)
-            self.shell.ev(f'PM.text("""{cell}""", buf="{buf}", tacit={args.tacit})')
+            self.shell.ev(f'PM.text("""{cell}""", buf="{buf}", tacit={args.tacit}, debug={args.debug})')
 
     @line_cell_magic
     @magic_arguments('%pmf')
-    @argument('-t', '--tacit', action='store_true', help='tacit: suppress output as Markdown')
     @argument('-a', '--appendix', action='store_true', help='Mark as appendix material.')
-    @argument('-s', '--summary', action='store_true', help='Mark as summary material (exlusive with appendix).')
-    @argument('-n', '--new_slide', action='store_false', help='Set to suppress new slide.')
     @argument('-f', '--fstring', action='store_true', help='Convert caption into f string and evaluate.')
-    @argument('-p', '--promise', action='store_true', help='Promise: write file but append nothing to stream')
     @argument('-h', '--height', type=float, default=0.0, help='Vertical size, generates height=height clause.')
+    @argument('-n', '--new_slide', action='store_false', help='Set to suppress new slide.')
+    @argument('-p', '--promise', action='store_true', help='Promise: write file but append nothing to stream')
+    @argument('-s', '--summary', action='store_true', help='Mark as summary material (exlusive with appendix).')
+    @argument('-t', '--tacit', action='store_true', help='tacit: suppress output as Markdown')
     def pmf(self, line='', cell=None):
         """
         PresentationManager figure utility. Add a new figure to the stream, format and save as self.fig_format file.
@@ -788,8 +916,6 @@ class PresentationManagerMagic(Magics):
             label text
             many lines of caption text
             caption continues.
-            optional: last line is format_function, e.g., as lambda function
-
         """
 
         if cell:
@@ -834,15 +960,20 @@ class PresentationManagerMagic(Magics):
 
     @line_cell_magic
     @magic_arguments('%pmt')
-    @argument('-t', '--tacit', action='store_true', help='tacit: suppress output as Markdown')
-    @argument('-p', '--promise', action='store_true', help='Promise: write file but append nothing to stream')
     @argument('-a', '--appendix', action='store_true', help='Mark as appendix material.')
+    @argument('-e', '--engine', type=str, default='tikz', help='Use ENGINE to covert to md: latex or tikz (default')
+    @argument('-f', '--fstring', action='store_true', help='Convert caption into f string and evaluate.')
+    @argument('-h', '--hrule', type=str, default=None, help='Horizontal rule locations eg 1,3,-1')
     @argument('-m', '--summary', action='store_true', help='Mark as summary material (exlusive with appendix).')
     @argument('-n', '--new_slide', action='store_false', help='Set to suppress new slide.')
-    @argument('-f', '--fstring', action='store_true', help='Convert caption into f string and evaluate.')
+    @argument('-p', '--promise', action='store_true', help='Promise: write file but append nothing to stream')
     @argument('-w', '--wide', type=int, default=0, help='Use wide table mode, WIDE number of columns')
-    @argument('-z', '--size', type=str, default='', help='Fontsize: tiny, scriptsize, footnotesize, or number (e.g., 0.15) for custom font size etc.')
     @argument('-r', '--format', action='store_true', help='Indicates the last line of input is a float_format function')
+    @argument('-s', '--scale', type=float, default=0.5, help='Scale for tikz')
+    @argument('-t', '--tacit', action='store_true', help='tacit: suppress output as Markdown')
+    @argument('-v', '--vrule', type=str, default=None, help='Vertical rule locations, to left of col no')
+    @argument('-z', '--size', type=str, default='', help='Fontsize: tiny, scriptsize, footnotesize, or number '
+                                                         '(e.g., 0.15) for custom font size etc.')
     def pmt(self, line, cell=None):
         """
         PresentationManager table utility. Add a new table to the stream, format and save as TeX file.
@@ -864,11 +995,11 @@ class PresentationManagerMagic(Magics):
         """
         if cell:
             args = parse_argstring(self.pmt, line)
+            # manipulation common to both engines
             logger.info(args)
             buf = 'body'
             if args.appendix: buf = 'appendix'
             if args.summary: buf = 'summary'
-
             # get rid of multiple new lines
             stxt = re.sub('\n+', '\n', cell, re.MULTILINE).strip().split('\n')
             assert len(stxt) >= 2
@@ -885,23 +1016,48 @@ class PresentationManagerMagic(Magics):
             else:
                 caption = ""
             logger.info(caption)
-            if args.wide:
-                # wide tables don't have captions.
-                s = f'promise = PM.wide_table({df}, "{label}", buf="{buf}", ' \
-                        f'new_slide={args.new_slide}, nparts={args.wide}, '  \
-                        f'tacit={args.tacit}, promise={args.promise}'
-            else:
-                s = f'promise = PM.table({df}, "{label}", buf="{buf}", caption="""{caption}""", ' \
-                        f'new_slide={args.new_slide}, ' \
-                        f'tacit={args.tacit}, promise={args.promise}'
-            if args.size != '':
-                if np.all([i in '0123456789.' for i in args.size]):
-                    s += f', font_size={args.size}'
+            #
+            # Engine specific
+            if args.engine == 'latex':
+                if args.wide:
+                    # wide tables don't have captions.
+                    s = f'promise = PM.wide_table({df}, "{label}", buf="{buf}", ' \
+                            f'new_slide={args.new_slide}, nparts={args.wide}, '  \
+                            f'tacit={args.tacit}, promise={args.promise}'
                 else:
-                    s += f', font_size="{args.size}"'
-            if args.format:
-                s += f''', float_format={ff}'''
-            s += ')'
+                    s = f'promise = PM.table({df}, "{label}", buf="{buf}", caption="""{caption}""", ' \
+                            f'new_slide={args.new_slide}, ' \
+                            f'tacit={args.tacit}, promise={args.promise}'
+                if args.size != '':
+                    if np.all([i in '0123456789.' for i in args.size]):
+                        s += f', font_size={args.size}'
+                    else:
+                        s += f', font_size="{args.size}"'
+                if args.format:
+                    s += f''', float_format={ff}'''
+                s += ')'
+            elif args.engine == 'tikz':
+                hrule = args.hrule
+                vrule = args.vrule
+                if hrule:
+                    hrule = [int(i) for i in hrule.split(',') if i.isnumeric()]
+                if vrule:
+                    vrule = [int(i) for i in vrule.split(',') if i.isnumeric()]
+                try:
+                    scale = float(args.scale)
+                except ValueError:
+                    logger.info(f'Error converting args.scale {args.scale} to float')
+                    scale = 0.5
+                s = f'promise = PM.tikz_table({df}, "{label}", buf="{buf}", caption="""{caption}""", ' \
+                    f'new_slide={args.new_slide}, ' \
+                    f'tacit={args.tacit}, promise={args.promise}, ' \
+                    f'hrule={hrule}, vrule={vrule}, scale={scale}, ' \
+                     'sparsify=1, figure="table" '
+                if args.format:
+                    s += f''', float_format={ff}'''
+                s += ')'
+            else:
+                raise ValueError(f'Inadmissible enging {args.engine}: options tikz or latex')
         else:
             # called as line magic: [table] @ label or just label, uses bit
             if line.find('@') >= 0:
@@ -912,6 +1068,7 @@ class PresentationManagerMagic(Magics):
                 df = 'bit'
                 label = line.strip()
             s = f'promise = PM.table({df}, "{label}", tacit=True, promise=True)'
+
         logger.info(s)
         self.shell.ex(s)
 
@@ -935,6 +1092,354 @@ class PresentationManagerMagic(Magics):
             else:
                 logger.info('Missing variables..recomputing cell.')
                 self.shell.ex(cell)
+
+
+
+def _sparsify(col):
+    """
+    sparsify col values, col a pd.Series
+    column results from a reset_index so has index 0,1,2... this is relied upon.
+    """
+    last = col[0]
+    new_col = col.copy()
+    rules = []
+    for k, v in col[1:].items():
+        if v == last:
+            new_col[k] = ''
+        else:
+            last = v
+            rules.append(k)
+            new_col[k] = v
+    return new_col, rules
+
+
+def df_to_tikz(df, *, fn_out=None, float_format=None, tabs=None,
+               show_index=True, scale=0.717, height=1, column_sep=1/2, row_sep=1/8,
+               figure='figure', color='blue!0', extra_defs='', hrule=None,
+               vrule=None, post_process='', label='', caption='',
+               sparsify=1, clean_index=False):
+    """
+    Write DataFrame to custom tikz matrix to allow greater control of
+    formatting and insertion of horizontal divider lines
+
+    Estimates tabs from text width of fields (not so great if includes TeX);
+    manual override available. Tabs gives the widths of each field in
+    em (width of M)
+
+    Standard row height = 1.5em seems to work - set in meta
+
+    first and last thick rules by default
+    others below (Python, zero-based) row number, excluding title row
+
+    keyword arguments : value (no newlines in value) escape back slashes!
+    #keyword... rows ignored
+    passed in as a string to facilitate using them with %%pmt?
+
+    Rules:
+    hrule at i means below row i of the table. (1-based) Top, bottom and below index lines
+    are inserted automatically. Top and bottom lines are thicker.
+
+    vrule at i means to the left of table column i (1-based); there will never be a rule to the far
+    right...it looks plebby; remember you must include the index columns!
+
+    sparsify  number of cols of multi index to sparsify
+
+    keyword args:
+        scale           scale applied to whole table - default 0.717
+        height          row height, rec. 1 (em)
+        column_sep      col sep in em
+        row_sep         row sep in em
+        figure          table, figure or sidewaysfigure
+        color           color for text boxes (helps debugging)
+        extra_defs      TeX defintions and commands put at top of table,
+                        e.g., \\centering
+        lines           lines below these rows, -1 for next to last row etc.; list of ints
+        post_process    e.g., non-line commands put at bottom of table
+        label
+        caption         text for caption
+
+    TODO
+        Sanitizing indexes!!! = Caller's responsibility
+        Column MultIndexs (rows handled by reset_index...)
+
+    Original version see: C:\\S\\TELOS\\CAS\\AR_Min_Bias\\cvs_to_md.py
+
+    :param df:
+    :param fn_out:
+    :param float_format:
+    :param tabs:
+    :param show_index:
+    :param scale:
+    :param height:
+    :param column_sep:
+    :param row_sep:
+    :param figure:
+    :param color:
+    :param extra_defs:
+    :param lines:
+    :param post_process:
+    :param label:
+    :param caption:
+    :return:
+
+
+    """
+
+    header = """
+\\begin{{{figure}}}
+\\centering
+{extra_defs}
+\\begin{{tikzpicture}}[
+    auto,
+    transform shape,
+    table/.style={{
+        matrix of nodes,
+        row sep={row_sep}em,
+        column sep={column_sep}em,
+        nodes in empty cells,
+        nodes={{draw={color}, rectangle, scale={scale}, text height={height}em, text badly ragged}},
+"""
+
+    footer = """
+{post_process}
+
+\\end{{tikzpicture}}
+{caption}
+\\end{{{figure}}}
+"""
+
+    # make a safe float format
+    if float_format is None:
+        wfloat_format = PresentationManager.default_float_format
+    else:
+        # If you pass in a lambda function it won't have error handling
+        def _ff(x):
+            try:
+                return float_format(x)
+            except:
+                return x
+        wfloat_format = _ff
+
+    # index
+    if show_index:
+        if isinstance(df.index, pd.MultiIndex):
+            nc_index = len(df.index.levels)
+        else:
+            nc_index = 1
+        df = df.copy().reset_index(drop=False)
+        if sparsify:
+            if hrule is None:
+                hrule = set()
+        for i in range(sparsify):
+            df.iloc[:, i], rules = _sparsify(df.iloc[:, i])
+            # print(rules, len(rules), len(df))
+            # don't want lines everywhere
+            if len(rules) < len(df) - 1:
+                hrule = set(hrule).union(rules)
+    else:
+        nc_index = 0
+
+    if clean_index:
+        # dont use the index
+        # but you do use the columns, this does both
+        # logger.debug(df.columns)
+        df = PresentationManager.clean_index(df)
+        # logger.debug(df.columns)
+
+    if nc_index:
+        if vrule is None:
+            vrule = set()
+        else:
+            vrule = set(vrule)
+        # to the left of... +1
+        vrule.add(nc_index + 1)
+
+    if isinstance(df.columns, pd.MultiIndex):
+        nr_columns = len(df.columns.levels)
+    else:
+        nr_columns = 1
+    logger.debug(f'rows in columns {nr_columns}, cols in index {nc_index}')
+
+    # internal TeX code
+    matrix_name = hex(abs(hash(str(df))))
+
+    # this affects how the table is printed in the md file
+    # tabs, an estimate column widths, determines the size of the table columns
+    colw = dict.fromkeys(df.columns,  0)
+    _tabs = []
+    mxmn = {}
+    for c in df.columns:
+        # figure width of the column labels; if index c= str, if MI then c = tuple
+        if type(c) == str:
+            cw = len(c)
+        else:
+            # could be float etc.
+            try:
+                cw = max(map(lambda x : len(wfloat_format(x)), c))
+            except TypeError:
+                # not a MI, float or something
+                cw = len(str(c))
+        if df.dtypes[c] == object:
+            # 1.2 allows more capitals in the heading
+            colw[c] = max(0, max(df[c].str.len().max(), cw))
+            mxmn[c] = (df[c].str.len().max(), df[c].str.len().min())
+        else:
+            _ = list(map(lambda x: len(wfloat_format(x)), df[c]))
+            colw[c] = max(0, max(max(_), cw))
+            mxmn[c] = (max(_), min(_))
+        _tabs.append(colw[c])
+
+    if tabs is None:
+        tabs = _tabs
+
+    logger.debug(f'tabs: {tabs}')
+
+    # alignment dictionaries
+    ad = {'l': 'left', 'r': 'right', 'c': 'center'}
+    ad2 = {'l': '<', 'r': '>', 'c': '^'}
+    # guess alignments: TODO add dates?
+    align = []
+    for n, i in zip(df.columns, df.dtypes):
+        x, n = mxmn[n]
+        if x == n and len(align) == 0:
+            align.append('l')
+        elif i == object and x == n:
+            align.append('c')
+        elif i == object:
+            align.append('l')
+        else:
+            align.append('r')
+    logger.debug(align)
+
+    # start writing
+    sio = StringIO()
+    sio.write(header.format(figure=figure, extra_defs=extra_defs, color=color,
+                            scale=scale, height=height, column_sep=column_sep,
+                            row_sep=row_sep))
+
+    # table header
+    # title rows
+    for i in range(1, nr_columns+1):
+        sio.write(f'\trow {i}/.style={{nodes={{text=black, font=\\bfseries}}}},\n')
+
+    # write column spec
+    for i, w, al in zip(range(1, len(align)+1), tabs, align):
+        # average char is only 0.48 of M
+        # https://en.wikipedia.org/wiki/Em_(gtypography)
+        sio.write(f'\tcolumn {i}/.style={{baseline, '
+                  f'nodes={{align={ad[al]:<6s}}}, text width={max(2, 0.6 * w):.2f}em, '
+                  f'inner xsep=0, inner ysep=0}},\n')
+    sio.write('\t}]\n')
+
+    sio.write("\\matrix ({matrix_name}) [table, ampersand replacement=\\&]{{\n".format(matrix_name=matrix_name))
+
+    # body of table, starting with the column headers
+    # write header rows  (again, issues with multi index)
+    if isinstance(df.columns, pd.MultiIndex):
+        for lvl in range(len(df.columns.levels)):
+            nl = ''
+            for cn, c, al in zip(df.columns, df.columns.get_level_values(lvl), align):
+                c = wfloat_format(c)
+                s = f'{nl} {{cell:{ad2[al]}{colw[cn]}s}} '
+                nl = '\\&'
+                sio.write(s.format(cell=c))
+            sio.write('\\\\\n')
+    else:
+        nl = ''
+        for c, al in zip(df.columns, align):
+            c = wfloat_format(c)
+            s = f'{nl} {{cell:{ad2[al]}{colw[c]}s}} '
+            nl = '\\&'
+            sio.write(s.format(cell=c))
+        sio.write('\\\\\n')
+
+    # write table entries
+    for idx, row in df.iterrows():
+        nl = ''
+        for c, cell, al in zip(df.columns, row, align):
+            cell = wfloat_format(cell)
+            s = f'{nl} {{cell:{ad2[al]}{colw[c]}s}} '
+            nl = '\\&'
+            sio.write(s.format(cell=cell))
+        sio.write('\\\\\n')
+    sio.write(f'}};\n\n')
+
+    # decorations and post processing - horizontal and vertical lines
+    nr, nc = df.shape
+    # add for the index and the last row
+    nr += nr_columns
+    # always include top and bottom
+    # you input a table row number and get a line below it; it is implemented as a line ABOVE the next row
+    # function to convert row numbers to TeX table format (edge case on last row -1 is nr and is caught, -2
+    # is below second to last row = above last row)
+    python_2_tex = lambda x: x + nr_columns + 1 if x >= 0 else nr + x + 2
+    tb_rules = [nr_columns + 1, python_2_tex(-1)]
+    if hrule:
+        hrule = set(map(python_2_tex, hrule)).union(tb_rules)
+    else:
+        hrule = list(tb_rules)
+    logger.info(f'hlines: {hrule}')
+
+    # why
+    yshift = row_sep / 2
+    xshift = -column_sep / 2
+    descender_proportion = 0.25
+
+    # top rule is special
+    ls = 'thick'
+    ln = 1
+    sio.write(f'\\path[draw, {ls}] ([yshift={yshift}em]{matrix_name}-{ln}-1.north west)  -- '
+              f'([yshift={yshift}em]{matrix_name}-{ln}-{nc}.north east);\n')
+
+    for ln in hrule:
+        ls = 'thick' if ln == nr + nr_columns + 1 else ('semithick' if ln == 1 + nr_columns else 'very thin')
+        if ln <= nr:
+            # line above TeX row ln+1 that exists
+            sio.write(f'\\path[draw, {ls}] ([yshift={yshift}em]{matrix_name}-{ln}-1.north west)  -- '
+                      f'([yshift={yshift}em]{matrix_name}-{ln}-{nc}.north east);\n')
+        else:
+            # line above row below bottom = line below last row
+            # descenders are 200 to 300 below baseline
+            ln = nr
+            sio.write(f'\\path[draw, thick] ([yshift={-height*descender_proportion-yshift}em]{matrix_name}-{ln}-1.base west)  -- '
+                      f'([yshift={-height*descender_proportion-yshift}em]{matrix_name}-{ln}-{nc}.base east);\n')
+
+    if vrule:
+        # to left of col, 1 based, includes index
+        ls = 'very thin'
+        for cn in vrule:
+            sio.write(f'\\path[draw, {ls}] ([yshift={yshift}em, xshift={xshift}em]{matrix_name}-1-{cn}.north west)  -- '
+                      f'([yshift={-height*descender_proportion-yshift}em, xshift={xshift}em]{matrix_name}-{nr}-{cn}.base west);\n')
+
+    if label == '':
+        lt = ''
+        label = '}  % no label'
+    else:
+        lt = label
+        label = f'\\label{{{label}}}'
+    if caption == '':
+        if label != '':
+            logger.warning(f'You have a lable but no caption; the label {label} will be ignored.')
+        caption = '% caption placeholder'
+    else:
+        caption = f'\\caption{{{caption} {label}}}'
+    sio.write(footer.format(figure=figure, post_process=post_process, caption=caption))
+
+    if isinstance(fn_out, Path):
+        fout = fn_out
+    elif fn_out is not None:
+        fout = Path(fn_out)
+    else:
+        fout = None
+
+    if fout:
+        with fout.open('w', encoding='utf-8') as f:
+            f.write(sio.getvalue())
+            # for debug only
+            if lt != '':
+                f.write(f'\n\n# A section\nSome text. And a reference \\cref{{{lt}}}')
+
+    return sio.getvalue()
 
 
 ip = get_ipython()
