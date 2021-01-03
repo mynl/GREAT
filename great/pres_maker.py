@@ -41,16 +41,20 @@ from matplotlib.pyplot import Figure
 import pandas as pd
 import datetime
 from .markdown_make import markdown_make_main
-from .utils import logger
+from .utils import logger, filename
 import re
 import numpy as np
 import unicodedata
 from pandas.io.formats.format import EngFormatter
-
+import json
+from collections import OrderedDict
+import subprocess
+from platform import platform
 from IPython.display import Markdown, display
 from IPython.core.magic import Magics, magics_class, line_magic, cell_magic, line_cell_magic
 from IPython.core.magic_arguments import argument, magic_arguments, parse_argstring
 from IPython import get_ipython
+from titlecase import titlecase
 
 # import sys
 # import re
@@ -63,10 +67,23 @@ from IPython import get_ipython
 # import unicodedata
 
 
+# Size = dict(TINY = T = 300
+#     VSMALL = VS = 400
+#     SMALL = S = 500
+#     MEDIUM = M = 600
+#     LARGE = L = 700
+#     XLARGE = XL = 800
+
+
 class PresentationManager(object):
+    """
+    Class level doc string...
+
+    """
 
     __yaml__ = """---
 title: "{title}"
+subtitle: "{subtitle}"
 author: Stephen J. Mildenhall
 date: "{created}"
 fontsize: {font_size}pt
@@ -76,16 +93,19 @@ fonttheme  : structurebold
 colortheme : orchid
 institute: \\convexmark
 classoption: t
+numbersection: true 
 toc: false
 filter: pandoc-citeproc
 bibliography: /S/TELOS/biblio/library.bib
 csl: /S/TELOS/biblio/journal-of-finance.csl
 link-citations: true
-header-includes:
-    - \\input{{/s/telos/common/newgeneral.tex}}
+header-includes: 
+    - \\input{{/s/telos/common/general2021.tex}}
+    - \\geometry{{paper=legalpaper, landscape, mag=2000, truedimen}}
+cla: --top-level-division=section
+cla: --slide-level=2
 cla: --standalone
-cla: -f markdown+smart+yaml_metadata_block+citations
-cla: --pdf-engine=xelatex
+cla: -f markdown+smart+yaml_metadata_block+citations{pdf_engine}
 cla: -o pdf
 cla: --filter pandoc-citeproc
 cla: -t beamer
@@ -94,14 +114,25 @@ debug: true
 
 """
 
-    def __init__(self, title, key, *, file_name='', base_dir='notes',
-                 fig_format='pdf', output_style='with_table',
-                 default_float_fmt=None, tidy=True,
-                 default_table_font_size=0.15):
+    def __init__(self, config_file, tops_id, tidy=False):
         """
+
+        Originally:
+        title, subtitle, key, base_dir, *,
+                 top_name='', top_value='',
+                 file_name='',
+                 fig_format='pdf', output_style='with_table',
+                 default_float_fmt=None, tidy=False,
+                 default_table_font_size=0.15, tacit_override=False,
+                 pdf_engine='')
+
         file_name of output, including extension
 
-        key = short vignette name prepended to name of all tables and image files
+                 pdf_engine='cla: --pdf-engine=lualatex'):
+
+        base_dir should be notes (but you need to state that to avoid screw ups)
+
+        key = short vignette name prepended to name of all tables and image files; goes with title... uber level
         file_name can be a/b/c/file.md
         all intermediate dirs created
         images in a/b/c/img
@@ -112,9 +143,23 @@ debug: true
         key = vig-{vig}-something and file = key.md then it will NOT be because only key-*.* files
         are deleted. This is the recommended approach and is the default if key is ''.
 
+        if tacit_override then override tacit command and show anyway (tables and blobs only)
+
+
+        title
+        key  becomes key-top_value
+        top_name  Module, Part etc.
+        top_value  A, B  or I, II or whatever
+        subtitle ==> top_name top_value subtitle
+        filename ==> key top_value (upper case)  [can ne over ridden]
+
+
+        top_name: Part | Module etc.
+        top_value: A, B, I, II etc.
+
         :param file_name:
         :param base_dir: where to store output, default ./notes
-        :param key:  prepended to file names to cluster them. Should be unique to the doc.
+        :param key: (becomes key-top_value, prepended to file names to cluster them. Should be unique to the doc.
         :param title:
         :param fig_format:
         :param output_style: caption (caption in main doc just numbers in include),
@@ -124,26 +169,37 @@ debug: true
 
         """
 
-        self.title = title
-        self.key = key
-        if file_name == '':
-            self.file_name = self.make_safe_label(title) + '.md'
-        else:
-            self.file_name = file_name + '.md'
-        self.fig_format = fig_format
-        self.output_style = output_style
-        if default_float_fmt is None:
-            self.default_float_fmt = PresentationManager.default_float_format
-        else:
-            self.default_float_fmt = default_float_fmt
-        self.default_table_font_size = default_table_font_size
+        config = json.load(Path(f'{config_file}.config').open('r', encoding='utf-8'))
+        self.tops_id = tops_id
+
+        self.title = config['title']
+        self.key = config['key']
+        # tured to Path below
+        base_dir = config['base_dir']
+        self.top_name = config['top_name']
+        self.fig_format = config['fig_format']
+        self.output_style = config['output_style']
+        self.pdf_engine = config['pdf_engine']
+
+        # for this specific document
+        top = config['tops'][tops_id]
+        self.subtitle = top['subtitle']
+        self.top_value = top['top_value']
+
+        # no choice of filename
+        self.file_name = f'{self.key}-{self.top_value}.md'
+
+        # file specific, set manually
+        self.default_float_fmt = PresentationManager.default_float_format
+
+        # deprecated
+        self.default_table_font_size = 0.15
 
         # main file for output and ancillary directories
         self.base_dir = Path(base_dir)
-        print(self.base_dir, self.base_dir.exists())
         self.file = self.base_dir / self.file_name
-        logger.info(f'base_dir = {self.base_dir.absolute()}')
-        logger.info(f'output filename = {self.file}')
+        logger.info(f'base_dir = {self.base_dir.resolve()}')
+        logger.info(f'output file = {self.file.resolve()}')
         self.base_dir.mkdir(parents=True, exist_ok=True)
         self.out_dir = self.base_dir / 'pdf'
         self.out_dir.mkdir(parents=True, exist_ok=True)
@@ -151,8 +207,12 @@ debug: true
         self.figure_dir.mkdir(parents=True, exist_ok=True)
         self.table_dir = self.base_dir / 'table'
         self.table_dir.mkdir(parents=True, exist_ok=True)
+        # for debug output
+        (self.table_dir / 'pdf').mkdir(parents=True, exist_ok=True)
+
+        # unless over-ridden, start counting at 1, appendices count negative
         self.section = 0
-        self.appendix = -1
+        self.appendix = 0
 
         # tidy up
         if tidy:
@@ -161,14 +221,33 @@ debug: true
         # output
         self.toc = []
         self._slides = set()
-        self.sios = {'contents': StringIO(), 'summary': StringIO(), 'body': StringIO(), 'appendix' : StringIO()}
+        self.sios = OrderedDict(contents=StringIO(), summary=StringIO(), body=StringIO(), appendix=StringIO())
 
-        # start with toc header
+        # starts in base config: active and not in debug mode
+        self._tacit_override = False
+        self._active = True
+        self._debug = False
+        self.debug_dm_file = self.base_dir / 'dm.md'
+
+        # start by writing the toc header
         self._write_buffer_('contents', '## Contents\n')
 
-        # starts active
-        self._active = True
+        # store for future use
+        self.config = config
+        self.config_file = config_file
 
+    @property
+    def debug(self):
+        return self._debug
+
+    @debug.setter
+    def debug(self, value):
+        assert value in ('on', 'append', 'off', True, False)
+        # when this changes to on delete the old file; also acts as a reset
+        if value in ('on', 'append', 'off', True):
+            if self.debug_dm_file.exists():
+                self.debug_dm_file.unlink()
+        self._debug = value
 
     @property
     def active(self):
@@ -178,6 +257,14 @@ debug: true
     def active(self, value):
         self._active = value
 
+    @property
+    def tacit_override(self):
+        return self._tacit_override
+
+    @tacit_override.setter
+    def tacit_override(self, value):
+        self._tacit_override = value
+
     def section_number(self, buf):
         """
         get the number / letter for the next section
@@ -186,19 +273,24 @@ debug: true
         :param buf:
         :return:
         """
+        prefix = ''
+        if self.top_name != '':
+            # prefix = f'{self.top_name} {self.top_value}'
+            prefix = f'{self.top_value}.'
         if buf == 'body':
             self.section += 1
-            return f'Section {self.section: >2d}. '
+            return f'{prefix}{self.section:0>2d}. ', self.section
         elif buf == 'summary':
-            return ''
+            return '', 0
         elif buf == 'appendix':
-            self.appendix += 1
-            c = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'[self.appendix]
-            return f'Appendix {c}. '
+            self.appendix -= 1
+            # c = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'[self.appendix]
+            c = int_to_roman(-self.appendix)
+            return f'Appendix {prefix}{c}. ', self.appendix
         else:
             raise ValueError('Hopeless confusion!')
 
-    def text(self, txt, buf='body', tacit=False, debug=False):
+    def text(self, txt, buf='body', tacit=False):
         """
         add text to buffer
 
@@ -213,19 +305,21 @@ debug: true
         for i, ln in enumerate(stxt):
             m = re.findall('^# (.*)', ln)
             if m:
-                s = self.section_number(buf)
+                s, s_no = self.section_number(buf)
                 tl = self.make_title(m[0])
                 ln = f"# {s} {tl}"
                 stxt[i] = ln
-                self.toc.append((s, tl))
+                self.toc.append((self.top_value, s_no, tl))
+            else:
+                # title case ## headings too
+                m2 = re.findall('^## (.*)', ln)
+                if m2:
+                    stxt[i] = '##  ' + titlecase(ln[3:])
 
-        txt = '\n'.join(stxt)
+        txt = '\n'.join(stxt) + '\n\n'
         self._write_buffer_(buf, txt)
-        self._write_buffer_(buf, '\n\n')
-        if debug:
-            (self.base_dir / 'dm.md').open('w', encoding='utf=8').write(txt)
-            # if not linux build it?!
-        if not tacit:
+
+        if self.tacit_override or not tacit:
             display(Markdown(txt))
 
     # aliases
@@ -267,6 +361,8 @@ debug: true
         label = self.make_safe_label(label)
         fig_file = self.figure_dir / f'{self.key}-{label}.{self.fig_format}'
         fig_file_local = f'img/{self.key}-{label}.{self.fig_format}'
+        if fig_file.exists():
+            logger.warning(f'File {fig_file} already exists...over-writing.')
         f.savefig(fig_file, **kwargs)
 
         # not the caption, that can contain tex
@@ -296,7 +392,7 @@ debug: true
         else:
             self._write_buffer_(buf, fig_text)
 
-        if not tacit:
+        if self.tacit_override or not tacit:
             display(Markdown(fig_text))
 
     def table(self, df, label, *, caption="", buf='body', float_format=None, fill_nan='', font_size=0.0,
@@ -368,6 +464,9 @@ debug: true
         Parameters
         ==========
 
+        :param promise:
+        :param new_slide:
+        :param buf:
         :param tacit:
         :param multipart:
         :param df:
@@ -389,7 +488,7 @@ debug: true
 
         """
 
-        assert not promise or self.output_style=='with_table'
+        assert not promise or self.output_style == 'with_table'
 
         if not self.active:
             if not tacit:
@@ -475,8 +574,10 @@ debug: true
         else:
             raise ValueError(f'Unknown option {self.output_style} for output_style passed to table.')
 
-        if not tacit:
+        if self.tacit_override or not tacit:
             display(df.style.format(float_format))
+            if caption != '':
+                display(Markdown(caption))
 
     def wide_table(self, df, label, *, buf='body', nparts=2,
                    float_format=None, fill_nan='', font_size=0.0,
@@ -574,7 +675,8 @@ debug: true
                              figure=figure, hrule=hrule, vrule=vrule, sparsify=sparsify, clean_index=True)
 
         table_file = self.table_dir / f'{self.key}-{label}.md'
-        print(table_file.absolute())
+        if table_file.exists():
+            logger.warning(f'File {table_file} exists, over-wriring.')
         table_file_local = f'table/{self.key}-{label}.md'
 
         if new_slide and not promise:
@@ -596,8 +698,10 @@ debug: true
         else:
             raise ValueError(f'Unknown option {self.output_style} for output_style passed to table.')
 
-        if not tacit:
+        if self.tacit_override or not tacit:
             display(df.style.format(float_format))
+            if caption != '':
+                display(Markdown(caption))
 
     @staticmethod
     def default_float_format(x, neng=3):
@@ -639,11 +743,12 @@ debug: true
         :param s:
         :return:
         """
-        s = s.replace('-', ' ').title()
+        # https://pypi.org/project/titlecase/#description
+        s = titlecase(s)  # .replace('-', ' '))
         # from / to
-        for f, t in zip(['Var', 'Tvar', 'Cv', 'Vs', 'Epd', 'Lr', 'Roe', 'Cle'],
-                        ['VaR', 'TVaR', 'CV', 'vs.', 'EPD', 'LR', 'ROE', 'CLE']):
-            s = s.replace(f, t)
+        # for f, t in zip(['Var ', 'Tvar ', 'Cv ', 'Vs ', 'Epd ', 'Lr ', 'Roe ', 'Cle ', 'Gdp', 'Gnp'],
+        #                 ['VaR ', 'TVaR ', 'CV ', 'vs. ', 'EPD ', 'LR ', 'ROE ', 'CLE ', 'GDP', 'GNP']):
+        #     s = s.replace(f, t)
         return s
 
     @staticmethod
@@ -689,8 +794,15 @@ debug: true
                 # count = 1: only replace the first occurrence
                 text = text.replace(slide_heading, new_text, 1)
                 logger.info(f'New section>> {new_text[:-1]}')
+
         # actually write the text
         self.sios[buf].write(text)
+
+        # optionally write debug file
+        if self.debug in ('on', 'append', True):
+            logger.info('In debug mode...writing dm.md')
+            mode = 'a' if self.debug == 'append' else 'w'
+            self.debug_dm_file.open(mode, encoding='utf-8').write(text)
 
     @property
     def slides(self):
@@ -721,44 +833,141 @@ debug: true
         return "Created {date:%Y-%m-%d %H:%M:%S}". \
             format(date=datetime.datetime.now())
 
-    def buffer(self):
+    def dump_toc(self):
+        """
+        save the toc as a json file
+        :return:
+        """
+        p = self.file.with_name(f'{self.key}-{self.top_value}-toc.json')
+        json.dump(self.toc, p.open('w', encoding='utf-8'), indent=4)
+        logger.info(f'Writing toc to {p.resolve()}')
+
+    def load_toc(self):
+        p = self.file.with_name(f'{self.key}-{self.top_value}-toc.json')
+        try:
+            toc = json.load(p.open('r', encoding='utf-8'))
+            logger.info(f'Read toc from {p.resolve()}')
+        except FileNotFoundError as e:
+            logger.warning(f'TOC file {self.key}-{self.top_value}toc.json not found.')
+            toc = None
+        return toc
+
+    def buffer(self, decorate=''):
         """
         assemble all the parts
         :return:
         """
+        # update toc
+        self.make_toc(decorate)
+        return '\n\n'.join(buf.getvalue() for buf in self.sios.values())
+
+    def make_toc(self, decorate=''):
+        """
+        sort the toc: Summary, Sections, Appendix
+        if decorate != '' it will bold thaat row (for burst mode)
+        :return:
+        """
         # new SIO each time for contents...
         self.sios['contents'] = StringIO()
-        sort_fun = lambda x : x[0]
-        toc_summary = sorted([i for i in self.toc if i[0].split()[0].strip() not in ('Appendix', 'Section')],
-                             key=sort_fun)
-        toc_body = sorted([i for i in self.toc if i[0].split()[0].strip() == 'Section'],
-                          key=sort_fun)
-        toc_appendix = sorted([i for i in self.toc if i[0].split()[0].strip() == 'Appendix'],
-                              key=sort_fun)
-        self.sios['contents'].write('# Table of Conents\n## Contents\n\n')
-        for s, c in toc_summary + toc_body + toc_appendix:
-            self.sios['contents'].write(f'\n\\tocentry{{{s}}}{{{c}}}')
-        return '\n\n'.join(buf.getvalue() for buf in self.sios.values())
+        # there are no sections in the summary (section is # level)
+        # toc_summary = sorted([i for i in self.toc if i[0].split()[2].strip() not in ('Appendix', 'Section')],
+        #                      key=sort_fun)
+        toc_body = sorted([i for i in self.toc if i[1] > 0], key=lambda x : x[1])
+        toc_appendix = sorted([i for i in self.toc if i[1] < 0], key=lambda x : x[1])
+        self.sios['contents'].write(f'# Table of Contents\n## {self.top_name} {self.top_value} Contents\n\n')
+        appendix_spacer_needed = True
+        for t, s, c in toc_body + toc_appendix:
+            s_ = int_to_roman(-s) if s < 0 else s
+            if s < 0 and appendix_spacer_needed:
+                self.sios['contents'].write('\n')
+                appendix_spacer_needed = False
+            if decorate == s:
+                # annotate row
+                self.sios['contents'].write(
+                    f'\n\\grttocentry{{\\bf {"Section" if s > 0 else "Appendix"} {t}.{s_}}}{{\\bf {c}}}')
+            else:
+                self.sios['contents'].write(
+                    f'\n\\grttocentry{{{"Section" if s > 0 else "Appendix"} {t}.{s_}}}{{{c}}}')
 
     def buffer_display(self):
         display(Markdown(self.buffer()))
 
-    def buffer_persist(self, font_size=12, tacit=False):
+    def buffer_persist(self, font_size=9, tacit=False, mode='single'):
         """
         persist and write out the StringIO cache to a physical file
+
+        :param font_size:
+        :param mode:   burst (separate files per section or all together or both
+        :param toc:    for burst mode: read toc to number sections ignored if it doesn't exist
+        :param tacit:  suppress markdown output of persisted file
+
         """
-        yaml = self.__yaml__.format(
-                title=self.title, created=self.date(),
-                font_size=font_size)
+        if mode in ('single', 'both'):
+            subtitle = f'{self.top_name} {self.top_value}: {self.subtitle}'
+            y = self.__yaml__.format(
+                    title=self.title, subtitle=subtitle, created=self.date(),
+                    font_size=font_size, pdf_engine=self.pdf_engine)
+            with self.file.open('w', encoding='UTF-8') as f:
+                f.write(y)
+                f.write(self.buffer())
+                logger.info(f'Writing to file {self.file.resolve()}')
+            # in all mode, dump out the toc for future reference
+            self.dump_toc()
+            if not tacit:
+                display(Markdown(self.file.open('r').read()))
 
-        with self.file.open('w', encoding='UTF-8') as f:
-            f.write(yaml)
-            f.write(self.buffer())
+        if mode in ('burst', 'both'):
+            toc = self.load_toc()
+            if toc is None:
+                toc = self.toc
+            # full section name -> (top number, section number)
+            toc_mapper = {k: (i, j) for i, j, k in toc}
+            # put in the correct section numbers according to the master toc
+            self.toc = [(*toc_mapper[k], k) for i, j, k in self.toc]
+            logger.info(f'Adjusted toc = {self.toc}')
 
-        if not tacit:
-            display(Markdown(self.file.open('r').read()))
+            # read buffers
+            summary = self.sios['summary'].getvalue()
 
-    def process(self, font_size=10, tacit=True):
+            body = self.sios['body'].getvalue().strip()
+            sbody = re.split('^(# .+)$', body, flags=re.MULTILINE)
+            body_dict = { i.split('  ')[1]: j for i, j in zip(sbody[1::2], sbody[2::2])}
+            if sbody[0] != '':
+                logger.warning(f'Pre first section not empty...Adding to summary.\n{sbody[0][:200]}')
+                summary = summary + sbody[0]
+
+            appendix = self.sios['appendix'].getvalue().strip()
+            if appendix != '':
+                sappendix = re.split('^(# .+)$', appendix, flags=re.MULTILINE)
+                appendix_dict = { i.split('  ')[1]: j for i, j in zip(sappendix[1::2], sappendix[2::2])}
+                if appendix[0] != '':
+                    logger.warning(f'Pre first content before Appendix: not expected..ignoring\n{appendix[0][:100]}.')
+            else:
+                appendix_dict = {}
+
+            for d in [body_dict, appendix_dict]:
+                for section, content in d.items():
+                    top_no, sec_no = toc_mapper[section]
+                    logger.info(f'Writing {top_no}.{sec_no}: {section}')
+                    s_ = f'{sec_no:0>2d}' if sec_no > 0 else int_to_roman(-sec_no)
+                    fsec_no = f'{top_no}.{s_}'
+                    self.make_toc(decorate=sec_no)
+                    y = self.__yaml__.format(
+                            title=f'{self.top_name} {self.top_value}: {self.subtitle}',
+                            subtitle=section, created=self.date(),
+                            font_size=font_size, pdf_engine=self.pdf_engine)
+                    with (self.base_dir / f'{self.key}-{top_no}-{s_}-burst.md').open("w", encoding='utf-8') as f:
+                        f.write(y)
+                        f.write('\n')
+                        f.write(self.sios['contents'].getvalue().strip())
+                        if summary != '':
+                            # summary attached to toc, comes before the body content
+                            f.write(summary.strip())
+                            f.write('\n\n')
+                        f.write(f'\n\n# {top_no}.{sec_no}. {section.strip()}\n\n')
+                        f.write(content)
+
+    def process(self, font_size=9, tacit=True):
         """
         Write out and run pandoc to convert
         Can set font_size and margin here, default 10 and 1 inches.
@@ -766,21 +975,22 @@ debug: true
         Set over_write = False and an existing markdown file will not be overwritten.
 
         """
-        # need to CD into appropriate directory
-        # do NOT overwrite if just using to create the exhibits and you are happy with the md "holder"
-        # file
         if not self.active:
-            print('Currently inactive...returning')
+            logger.warning('Currently inactive...returning')
             return
 
         self.buffer_persist(font_size, tacit)
-        if str(Path.home()) != '/home/steve':
-            # not in Linux
-            cwd = Path.cwd()
-            print(str(self.base_dir))
-            os.chdir(self.base_dir)
-            markdown_make_main("", self.file.name, str(self.file.stem))
-            os.chdir(cwd)
+        self.make_beamer(self.file)
+
+    def process_burst(self):
+        """
+        pandoc all the burst files
+        :return:
+        """
+        for f in self.base_dir.glob(f'{self.key}-burst-*.md'):
+            # parallelize would be nice...
+            logger.info(f'Processing {f}')
+            self.make_beamer(f)
 
     @staticmethod
     def clean_name(n):
@@ -798,7 +1008,6 @@ debug: true
         except:
             return n
 
-    # TODO SORT OUT below here?!
     @staticmethod
     def clean_underscores(s):
         """
@@ -846,6 +1055,91 @@ debug: true
                 idx = idx.set_levels(repl, level=i)
         return idx
 
+    def format_source(self, md_file, to='html', title=''):
+        """
+        Print out the source file to md_file and Pandoc if installed
+
+        md_file is the name of the md (JupyText linked!) that creates the presentation.
+
+        MUST use md linking through JupyText
+
+        :param to: output format: html or pdf
+        :param md_file:
+        :return:
+        """
+
+        header = """---
+title: Source Code
+author: Stephen J. Mildenhall
+date: created
+geometry: hmargin=1in, vmargin=.75in
+fontsize: 9pt
+classoption: a4paper, landscape
+header-includes: \\input{{/s/telos/common/general.tex}}
+cla: --standalone
+cla: -f markdown+smart+yaml_metadata_block+citations
+cla: --pdf-engine=xelatex
+cla: -o pdf
+cla: --filter pandoc-citeproc
+cla: -t latex
+cla: --template=/S/TELOS/Common/sjm-doc-template.tex
+debug: true
+---
+
+"""
+        if isinstance(md_file, Path):
+            p = md_file
+        else:
+            p = Path(md_file)
+        # only working with markdown files
+        if p.suffix != '.md':
+            raise ValueError('format_source only works with markdown .md files')
+
+        if to == 'html':
+            CREATE_NO_WINDOW = 0x08000000
+            source_output_file = self.base_dir / f'{self.key}-source.html'
+            logger.info(f'Making {source_output_file}')
+            css = filename('S/TELOS/PIRC/css/github.css')
+            if title == "":
+                title = p.stem
+            command = f'pandoc -f markdown -t html -o {source_output_file.resolve()} -s ' \
+                        f'--metadata title="{title}" '  \
+                        f'--css={css} {p.resolve()}'
+            logger.info(f'Executing: {command}')
+            if platform()[:5] == 'Linux':
+                p = subprocess.Popen(command, stdout=subprocess.PIPE)
+            else:
+                p = subprocess.Popen(command, creationflags=CREATE_NO_WINDOW, stdout=subprocess.PIPE)
+            p.communicate()
+
+        elif to == 'pdf':
+            with p.open('r', encoding='utf-8') as f:
+                txt = f.read()
+            source_output_file = self.base_dir / f'{self.key}-source.md'
+            with source_output_file.open('w', encoding='utf-8') as f:
+                f.write(header + txt)
+            self.make_beamer(source_output_file)
+        else:
+
+            raise ValueError(f'Unknown option to = {to}; pdf and html are valid options.')
+
+    def make_beamer(self, path_file):
+        """
+        make path_file = Path file object if possible
+
+        :param path_file:
+        :return:
+        """
+        # make it if windows
+        if str(Path.home()) == '/home/steve':
+            logger.warning('Linux system...cannot make file')
+        else:
+            logger.info('making file')
+            cwd = Path.cwd()
+            os.chdir(self.base_dir)
+            markdown_make_main("", path_file.name, path_file.stem)
+            os.chdir(cwd)
+
 
 @magics_class
 class PresentationManagerMagic(Magics):
@@ -859,7 +1153,7 @@ class PresentationManagerMagic(Magics):
     @line_cell_magic
     @magic_arguments('%pmb')
     @argument('-a', '--appendix', action='store_true', help='Mark as appendix material.')
-    @argument('-d', '--debug', action='store_true', help='Save blob to dm.md in notes folder for debugging.')
+    @argument('-c', '--code', action='store_true', help='Enclose in triple quotes as Python code.')
     @argument('-f', '--fstring', action='store_true', help='Convert cell into f string and evaluate.')
     @argument('-t', '--tacit', action='store_true', help='Tacit: suppress output as Markdown')
     @argument('-s', '--summary', action='store_true', help='Mark as summary material (exlusive with appendix).')
@@ -871,7 +1165,6 @@ class PresentationManagerMagic(Magics):
         %%pmt -s -a -m  (s show; a=appendix, m=suMmary)
 
         """
-
         if cell is None:
             # defaults, tacit for everything except sections
             if line.strip()[0:2] == '# ':
@@ -887,9 +1180,12 @@ class PresentationManagerMagic(Magics):
             if args.summary: buf = 'summary'
             if args.fstring:
                 logger.info('evaluating as f string')
-                temp = f'f"""{cell}"""'
+                if args.code:
+                    temp = f'f"""\\\\\\\\footnotesize\n\n```python\n{cell}\n```"""'
+                else:
+                    temp = f'f"""{cell}"""'
                 cell = self.shell.ev(temp)
-            self.shell.ev(f'PM.text("""{cell}""", buf="{buf}", tacit={args.tacit}, debug={args.debug})')
+            self.shell.ev(f'PM.text("""{cell}""", buf="{buf}", tacit={args.tacit})')
 
     @line_cell_magic
     @magic_arguments('%pmf')
@@ -969,10 +1265,11 @@ class PresentationManagerMagic(Magics):
     @argument('-p', '--promise', action='store_true', help='Promise: write file but append nothing to stream')
     @argument('-w', '--wide', type=int, default=0, help='Use wide table mode, WIDE number of columns')
     @argument('-r', '--format', action='store_true', help='Indicates the last line of input is a float_format function')
-    @argument('-s', '--scale', type=float, default=0.5, help='Scale for tikz')
-    @argument('-t', '--tacit', action='store_true', help='tacit: suppress output as Markdown')
+    @argument('-s', '--scale', type=float, default="M", help='Scale for tikz')
+    @argument('-t', '--tacit', action='store_true', help='tacit: suppress output as Markdown.')
+    @argument('-u', '--underscore', action='store_true', help='Apply de_underscore prior to formatting.')
     @argument('-v', '--vrule', type=str, default=None, help='Vertical rule locations, to left of col no')
-    @argument('-z', '--size', type=str, default='', help='Fontsize: tiny, scriptsize, footnotesize, or number '
+    @argument('-z', '--fontsize', type=str, default='', help='Fontsize: tiny, scriptsize, footnotesize, or number '
                                                          '(e.g., 0.15) for custom font size etc.')
     def pmt(self, line, cell=None):
         """
@@ -1028,11 +1325,11 @@ class PresentationManagerMagic(Magics):
                     s = f'promise = PM.table({df}, "{label}", buf="{buf}", caption="""{caption}""", ' \
                             f'new_slide={args.new_slide}, ' \
                             f'tacit={args.tacit}, promise={args.promise}'
-                if args.size != '':
-                    if np.all([i in '0123456789.' for i in args.size]):
-                        s += f', font_size={args.size}'
+                if args.fontsize != '':
+                    if np.all([i in '0123456789.' for i in args.fontsize]):
+                        s += f', fontsize={args.fontsize}'
                     else:
-                        s += f', font_size="{args.size}"'
+                        s += f', fontsize="{args.font_size}"'
                 if args.format:
                     s += f''', float_format={ff}'''
                 s += ')'
@@ -1046,12 +1343,16 @@ class PresentationManagerMagic(Magics):
                 try:
                     scale = float(args.scale)
                 except ValueError:
-                    logger.info(f'Error converting args.scale {args.scale} to float')
+                    logger.info(f'Error converting args.scale {args.scale} to float; valid options')
                     scale = 0.5
-                s = f'promise = PM.tikz_table({df}, "{label}", buf="{buf}", caption="""{caption}""", ' \
-                    f'new_slide={args.new_slide}, ' \
-                    f'tacit={args.tacit}, promise={args.promise}, ' \
-                    f'hrule={hrule}, vrule={vrule}, scale={scale}, ' \
+                if args.underscore:
+                    s = f'promise = PM.tikz_table(grt.de_underscore({df}), '
+                else:
+                    s = f'promise = PM.tikz_table({df}, '
+                s += f'"{label}", buf="{buf}", caption="""{caption}""", '\
+                     f'new_slide={args.new_slide}, ' \
+                     f'tacit={args.tacit}, promise={args.promise}, ' \
+                     f'hrule={hrule}, vrule={vrule}, scale={scale}, ' \
                      'sparsify=1, figure="table" '
                 if args.format:
                     s += f''', float_format={ff}'''
@@ -1158,10 +1459,6 @@ def df_to_tikz(df, *, fn_out=None, float_format=None, tabs=None,
         label
         caption         text for caption
 
-    TODO
-        Sanitizing indexes!!! = Caller's responsibility
-        Column MultIndexs (rows handled by reset_index...)
-
     Original version see: C:\\S\\TELOS\\CAS\\AR_Min_Bias\\cvs_to_md.py
 
     :param df:
@@ -1220,6 +1517,13 @@ def df_to_tikz(df, *, fn_out=None, float_format=None, tabs=None,
                 return x
         wfloat_format = _ff
 
+    if clean_index:
+        # dont use the index
+        # but you do use the columns, this does both
+        # logger.debug(df.columns)
+        df = PresentationManager.clean_index(df)
+        # logger.debug(df.columns)
+
     # index
     if show_index:
         if isinstance(df.index, pd.MultiIndex):
@@ -1239,13 +1543,6 @@ def df_to_tikz(df, *, fn_out=None, float_format=None, tabs=None,
     else:
         nc_index = 0
 
-    if clean_index:
-        # dont use the index
-        # but you do use the columns, this does both
-        # logger.debug(df.columns)
-        df = PresentationManager.clean_index(df)
-        # logger.debug(df.columns)
-
     if nc_index:
         if vrule is None:
             vrule = set()
@@ -1264,32 +1561,60 @@ def df_to_tikz(df, *, fn_out=None, float_format=None, tabs=None,
     matrix_name = hex(abs(hash(str(df))))
 
     # this affects how the table is printed in the md file
-    # tabs, an estimate column widths, determines the size of the table columns
+    # tabs from _tabs, an estimate column widths, determines the size of the table columns as displayed
     colw = dict.fromkeys(df.columns,  0)
+    headw = dict.fromkeys(df.columns,  0)
     _tabs = []
     mxmn = {}
-    for c in df.columns:
+    nl = df.index.nlevels
+    for i, c in enumerate(df.columns):
         # figure width of the column labels; if index c= str, if MI then c = tuple
+        # cw is the width of the column header/title
         if type(c) == str:
-            cw = len(c)
+            if i < nl:
+                cw = len(c)
+            else:
+                # for data columns look at words rather than whole phrase
+                cw = max(map(len, c.split(' ')))
+                # logger.info(f'leng col = {len(c)}, longest word = {cw}')
         else:
             # could be float etc.
             try:
-                cw = max(map(lambda x : len(wfloat_format(x)), c))
+                cw = max(map(lambda x: len(wfloat_format(x)), c))
             except TypeError:
                 # not a MI, float or something
                 cw = len(str(c))
+        headw[c] = cw
+        # now figure the width of the elements in the column
+        # mxmn is used to determine whether to center the column (if all the same size)
         if df.dtypes[c] == object:
             # 1.2 allows more capitals in the heading
-            colw[c] = max(0, max(df[c].str.len().max(), cw))
+            # colw[c] = max(0, max(df[c].str.len().max(), cw))
+            colw[c] = df[c].str.len().max()
             mxmn[c] = (df[c].str.len().max(), df[c].str.len().min())
         else:
             _ = list(map(lambda x: len(wfloat_format(x)), df[c]))
-            colw[c] = max(0, max(max(_), cw))
+            # colw[c] = max(0, max(max(_), cw))
+            colw[c] = max(_)
             mxmn[c] = (max(_), min(_))
-        _tabs.append(colw[c])
 
     if tabs is None:
+        # now know all column widths...decide what to do
+        # are all the columns about the same width?
+        data_cols = np.array([colw[k] for k in df.columns[nl:]])
+        same_size = (data_cols.std() <= 0.1 * data_cols.mean())
+        common_size = 0
+        if same_size:
+            common_size = data_cols.mean() + data_cols.std()
+            logger.info(f'data cols appear same size = {common_size}')
+        for i, c in enumerate(df.columns):
+            if i < nl or not same_size:
+                # index columns
+                _tabs.append(max(colw[c], headw[c]))
+            else:
+                # data all seems about the same width
+                _tabs.append(common_size)
+        print(_tabs)
         tabs = _tabs
 
     logger.debug(f'tabs: {tabs}')
@@ -1326,7 +1651,7 @@ def df_to_tikz(df, *, fn_out=None, float_format=None, tabs=None,
     for i, w, al in zip(range(1, len(align)+1), tabs, align):
         # average char is only 0.48 of M
         # https://en.wikipedia.org/wiki/Em_(gtypography)
-        sio.write(f'\tcolumn {i}/.style={{baseline, '
+        sio.write(f'\tcolumn {i}/.style={{' # baseline, '
                   f'nodes={{align={ad[al]:<6s}}}, text width={max(2, 0.6 * w):.2f}em, '
                   f'inner xsep=0, inner ysep=0}},\n')
     sio.write('\t}]\n')
@@ -1416,7 +1741,7 @@ def df_to_tikz(df, *, fn_out=None, float_format=None, tabs=None,
         label = '}  % no label'
     else:
         lt = label
-        label = f'\\label{{{label}}}'
+        label = f'\\label{{tab:{label}}}'
     if caption == '':
         if label != '':
             logger.warning(f'You have a lable but no caption; the label {label} will be ignored.')
@@ -1440,6 +1765,80 @@ def df_to_tikz(df, *, fn_out=None, float_format=None, tabs=None,
                 f.write(f'\n\n# A section\nSome text. And a reference \\cref{{{lt}}}')
 
     return sio.getvalue()
+
+
+def de_underscore(df, which='b'):
+    """
+    remove underscores from index and / or columns, replacing with space
+    Note, default behavior is to quote underscores
+
+    :param df:
+    :param which: row column b[oth]
+    :return:
+    """
+    # workers
+    def de_(n):
+        """
+        replace underscores with space
+        """
+        try:
+            if type(n) == str:
+                return n.replace('_', ' ')
+            else:
+                return n
+        except:
+            return n
+
+    def multi_de_(idx):
+        """ de_ for multiindex """
+        for i, lv in enumerate(idx.levels):
+            if lv.dtype == 'object':
+                repl = map(de_, lv)
+                idx = idx.set_levels(repl, level=i)
+        return idx
+
+    # work
+    df = df.copy()
+    idx_names = df.index.names
+    col_names = df.columns.names
+
+    if which in ['both', 'b', 'columns']:
+        if isinstance(df.columns, pd.core.indexes.multi.MultiIndex):
+            df.columns = multi_de_(df.columns)
+        else:
+            df.columns = map(de_, df.columns)
+
+    if which in ['both', 'b', 'index']:
+        if isinstance(df.index, pd.core.indexes.multi.MultiIndex):
+            df.index = multi_de_(df.index)
+        else:
+            df.index = map(de_, df.index)
+
+    df.index.names = idx_names
+    df.columns.names = col_names
+    return df
+
+def int_to_roman(num):
+    val = [
+        1000, 900, 500, 400,
+        100, 90, 50, 40,
+        10, 9, 5, 4,
+        1
+        ]
+    syb = [
+        "M", "CM", "D", "CD",
+        "C", "XC", "L", "XL",
+        "X", "IX", "V", "IV",
+        "I"
+        ]
+    roman_num = ''
+    i = 0
+    while num > 0:
+        for _ in range(num // val[i]):
+            roman_num += syb[i]
+            num -= val[i]
+        i += 1
+    return roman_num
 
 
 ip = get_ipython()

@@ -13,7 +13,6 @@ import matplotlib as mpl
 from cycler import cycler
 from itertools import product
 from io import StringIO
-from pathlib import Path
 # import math
 # from numpy import floor
 # for magics
@@ -22,9 +21,29 @@ from IPython.core.magic import line_magic, cell_magic, Magics, magics_class
 from IPython.core.magic_arguments import argument, magic_arguments, parse_argstring
 from datetime import datetime
 import logging
+from platform import platform
+from pathlib import Path
 
 logger = logging.getLogger('aggregate')
 
+
+def filename(fn):
+    """
+    convert fn based relative to S to work on Linux or win and return a Path object
+
+    :param fn:
+    :return:
+    """
+
+    if fn[0] == '/':
+        fn = fn[1:]
+
+    assert fn[0] == 'S'
+
+    if platform()[:5] == 'Linux':
+        return Path.home() / fn
+    else:
+        return Path(fn)
 
 
 def now():
@@ -409,11 +428,15 @@ class GreatMagics(Magics):
 
         ww, hh = 4, 3.25
         verbose = False
+        # for local use... called from sf11
+        __return__ = False
         kwargs = ''
         if line != '' and line.find('k') >= 0:
             pos = line.find('k')
             kwargs = line[pos+1:].strip()
             line = line[:pos].strip()
+        if line != '' and line.find('__return__') >= 0:
+            __return__ = True
         if line != '' and line.find('v') >= 0:
             verbose = True
             line = line.replace('v', '').strip()
@@ -431,7 +454,7 @@ class GreatMagics(Magics):
         h = nr * hh
 
         if nr * nc == 1:
-            ax = 'ax = ax0 = axs\n'
+            ax = 'ax = ax0 = axs\naxs = np.array([axs])\n'
             s = f'f, axs = smfig({nr}, {nc}, ({w}, {h}), {kwargs})\n{ax}\n\n{cell}'
         else:
             ax = ",".join([f'ax{i}' for i in range(nr*nc)]) + ' = axs.flat'
@@ -439,7 +462,26 @@ class GreatMagics(Magics):
             s = f'f, axs = smfig({nr}, {nc}, ({w}, {h}), {kwargs})\n{ax}\n{axi}\n\n{cell}'
         if verbose:
             print(s)
+        if __return__:
+            return s
+        self.shell.ex(s)
 
+    @cell_magic
+    def sf1(self, line, cell):
+        """
+        a single 1 x 1 plot
+        %%sf11 6
+        makes a 1 1 6 6 plot etc.
+        that is the only arg allowed
+
+        :param line:
+        :param cell:
+        :return:
+        """
+        if line == '':
+            line = 6
+        s = self.sf(f'1 1 {line} {line} __return__', cell)
+        s += 'ax0.grid(lw=0.25)\nax0.axis([-.025, 1.025, -0.025, 1.025])\n'
         self.shell.ex(s)
 
     @cell_magic
@@ -478,7 +520,6 @@ class GreatMagics(Magics):
             ml = max(map(len, dir(x)))
             fs = f'{{i:<{ml}s}}'
             print('\t'.join([fs.format(i=i) for i in dir(x) if i[0] != '_']))
-
 
 
 ip = get_ipython()

@@ -15,7 +15,6 @@ v 1.0 Dec 2019
 import os
 import hashlib
 import sys
-import re
 import subprocess
 import glob
 import string
@@ -24,6 +23,11 @@ import datetime
 import pathlib
 import shutil
 import re
+from pathlib import Path
+from platform import platform
+import logging
+
+logger = logging.getLogger('aggregate')
 
 # for MarkdownMake
 CREATE_NO_WINDOW = 0x08000000
@@ -32,7 +36,7 @@ TEMP_FILE_NAME = 'dm-temp'
 BEGIN_STRING = '\\begin{document}'
 END_STRING = '\\end{document}'
 LOCAL_YAML = 'local_build.yaml'  # name of default yaml files for empty headers
-
+PLATFORM = 'linux' if platform()[:5] == 'Linux' else 'win'
 
 def markdown_make_main(*argv):
     """
@@ -83,53 +87,29 @@ def markdown_make_main(*argv):
     :return:
     """
 
-    debug = 0
+    print(f'Operating system: {PLATFORM}')
+
     def dp(x):
-        if debug: print(x)
+        logger.debug(x)
 
-    print('RUNNING DOCMAKER VERSION ' * 5)
-
+    print('DEC 29 2020 VERSION ' * 5)
 
     if len(argv) == 0:
         argv = sys.argv
-
-    ydic = {}
 
     # update biblio file if we appear to be processing the book...
     book = pathlib.Path(argv[1])
     making_book = False
     if str(book.parent.absolute()).find('spectral_risk_measures_monograph') >= 0 or \
-       str(book.parent.absolute()).find('book-hack'):
+       str(book.parent.absolute()).find('book-hack') >= 0:
         making_book = True
         update_book_bibfile()
 
     # fix the date
     insert_date(argv[1])
 
-    PATTERN = re.compile(r'''((?:[^:"']|"[^"]*"|'[^']*')+)''')
-    yaml = False
-    with open(argv[1], 'r', encoding='UTF-8') as g:
-        txt = g.read()
-        g.seek(0)
-        # read in (when processing burst pages ydic is passed in)
-        for l in g:
-            if l == '---\n':
-                yaml = not yaml
-            if not yaml:
-                break
-            # need to only find the first :, beware : in quotes...
-            s = PATTERN.split(l)[1::2]
-            # beware here: this fucks up if there is a colon on the right...change PATTERN?
-            if len(s) == 2:
-                # here we are going to catch -o XXX because easier than doing later
-                ans = s[1].strip()
-                if ans[0:3] == '-o ':
-                    ans = '-o pdf/{:}.{:}'.format(argv[2], ans[3:])
-                if s[0] in ydic.keys():
-                    ydic[s[0]] += ans.split(' ')
-                else:
-                    ydic[s[0]] = ans.split(' ')
-
+    # read yaml or put in defaults if there is no YAML - allows easy creation of slides
+    txt, has_yaml, ydic = parse_yaml(argv[1])
     # pandoc started complaining about multiple cla args in YAML so take them out
     # print(ydic)
     # fa = re.findall(r'^cla[^\n]+\n', txt, re.MULTILINE)
@@ -137,26 +117,13 @@ def markdown_make_main(*argv):
     txt, n = re.subn(r'^cla[ ]*:[^\n]+\n', '', txt, flags=re.MULTILINE)
     print(f'Removed {n} cla clauses from txt')
 
-    # put in defaults if there is no YAML - allows easy creation of slides
-    add_non_cla = False
-    if len(ydic) == 0:
-        ydic = get_default_yaml(argv[1])
-        add_non_cla = True
-
     # insert_date function does NOT work for local-yaml builds
     dt = '"Created {date:%Y-%m-%d %H:%M:%S.%f}"'.format(date=datetime.datetime.now()).rstrip('0')
     if ydic.get('date', None):
         # print('Date tester: ', ydic['date'], ydic['date'][0])
         if ydic['date'][0].lower() in ['now', 'created', 'insert date', 'date']:
             # may or may not be in the text...
-            if add_non_cla:
-                print('Replacing date: now with (no yaml) ', dt)
-                ydic['date'] = [dt]
-            else:
-                # this is a little fragile...
-                dt = 'date: "Created {date:%Y-%m-%d %H:%M:%S.%f}"'.format(date=datetime.datetime.now())
-                print('Replacing date: now with ', dt)
-                txt = txt.replace('date: now', dt)
+            ydic['date'] = [dt]
 
     # process @@@include statements
     dn = os.path.split(argv[1])[0]
@@ -175,18 +142,17 @@ def markdown_make_main(*argv):
         # print('processing includes', n_includes)
 
     if ydic.get('burst', '') != '':
-        # burst mode: burst: [do burst t/f], [do build t/f], outdir
+        # burst mode: burst: [do burst t/f], [do build t/f], outdira
         cmd = ' '.join(ydic.get('burst', '')).split(',')
         do_burst = cmd[0].strip().lower()
         do_build = cmd[1].strip().lower()
         if len(cmd) == 2:
-            base_dir = 'c:\\temp\\burst'
+            if PLATFORM == 'win':
+                base_dir = 'c:\\temp\\burst'
+            else:
+                base_dir = Path.home() / 'temp/burst'
         else:
             base_dir = cmd[2:]
-        # tidy base_dir
-        # for f in glob.glob(os.path.join(base_dir, '*.md')):
-        #     print(f'removing {f}')
-        #     os.remove(f)
         if do_burst == 'true':
             print(f'bursting to {base_dir}')
             burst_file(txt, base_dir)
@@ -207,7 +173,7 @@ def markdown_make_main(*argv):
         print('Revealing comments...')
         txt = show_comments(txt)
     with open(nfn, 'w', encoding='utf-8') as f:
-        if add_non_cla:
+        if not has_yaml:
             f.write('---\n')
             for k, v in ydic.items():
                 if k not in ['cla', 'xcla', 'debug', 'xdebug']:
@@ -216,9 +182,13 @@ def markdown_make_main(*argv):
         f.write(txt)
 
     # build the argument list
-    args = ["\\users\\{:}\\appdata\\local\\pandoc\\pandoc.exe".format(os.getlogin())]
+    if PLATFORM == 'win':
+        args = ["\\users\\{:}\\appdata\\local\\pandoc\\pandoc.exe".format(os.getlogin())]
+    else:
+        args = ["pandoc"]
 
     # append all cla's from the yaml
+    # print(ydic)
     args += ydic.get('cla', [])
 
     # add the name of the file being processes!
@@ -232,9 +202,12 @@ def markdown_make_main(*argv):
                 data_dir = c.split('=')[1]
                 aux_dir = os.path.join(data_dir, 'templates')
     if data_dir == '':
-        data_dir = '/s/telos/common'
-        aux_dir = '/s/telos/common/'
-
+        if PLATFORM == 'win':
+            data_dir = '/s/telos/common'
+            aux_dir = '/s/telos/common/'
+        else:
+            data_dir = (Path.home() / 'S/TELOS/common')
+            aux_dir = (Path.home() / 'S/TELOS/common')
     debug_mode = ydic.get('debug', ['no'])[0].lower()
     # print(debug_mode)
     dp(f'ready to execute\n{debug_mode}\n{ydic}\n{args}')
@@ -248,9 +221,12 @@ def markdown_make_main(*argv):
             f.write(out)
             f.write(f'\nREM TeX Output: uncomment next line\n')
             f.write('REM ')
-            f.write(re.sub(r'\\pdf\\(.*)\.pdf', r'\1.tex', out))
+            if PLATFORM == 'win':
+                f.write(re.sub(r'\\pdf\\(.*)\.pdf', r'\1.tex', out))
+            else:
+                f.write(re.sub(r'/pdf/(.*)\.pdf', r'\1.tex', out))
 
-    if debug_mode not in ('quick', 'maketexformat'):
+    if debug_mode not in ('quick', 'maketexformat', 'format', 'makeformat', 'maketemplate'):
         print('EXECUTING MARKDOWN BUILD\n\n{:}\n'.format(' '.join(args)))
         # print('RAW args')
         # print(args)
@@ -271,7 +247,7 @@ def markdown_make_main(*argv):
         print('EXECUTING tex\n\n{:}\n'.format(' '.join(tex_args)))
         p = subprocess.Popen(tex_args, creationflags=CREATE_NO_WINDOW, stdout=subprocess.PIPE)
         p.communicate()
-    elif debug_mode == 'maketexformat':
+    elif debug_mode in ('maketexformat', 'format', 'makeformat', 'maketemplate'):
         # make tex format file based on this file
         # finds tex filename name looking in the pandoc template file
         # creates a tex file for the fmt by stripping the contents out of the calling program
@@ -329,6 +305,7 @@ def process_includes(txt, dn, color_includes, n_includes, file_map):
         try:
             with open(os.path.join(dn, res), 'r', encoding='utf-8') as f:
                 repl = f.read()
+                repl = strip_yaml(repl)
                 repl, n_includes = process_includes(repl, dn, False, n_includes, file_map)
                 if color_includes:
                     repl = f'''
@@ -342,19 +319,39 @@ def process_includes(txt, dn, color_includes, n_includes, file_map):
     return txt, n_includes
 
 
+def strip_yaml(text):
+    """
+    strip starging yaml, between first --- and next --- from text
+
+    :param text:
+    :return:
+    """
+    if text[:3] != '---':
+        return text
+    else:
+        stext = text.split('\n')
+        stext.pop(0)
+        n = 0
+        for ln in stext:
+            if ln != '---':
+                n += 1
+            else:
+                n += 1
+                return '\n'.join(stext[n:])
+
+
 def adjust_output_file(args, dir_name, new_output_name=''):
     # swap pdf/xx.pdf output for dir_name/xx.tex
     new_filename = ''
-    for i in args[::-1]:
-        if i == '-o':
-            args.remove(i)
-        if i[0:4] == 'pdf/':
-            args.remove(i)
-            if new_output_name == '':
-                new_output_name = i[4:-4]
-            new_filename = '{:}/{:}.tex'.format(dir_name, new_output_name)
-    args.append('-o')
-    args.append(new_filename)
+    for i, f in enumerate(args):
+        if f == '-o':
+            f = args[i + 1]
+            temp = Path(f)
+            if f.find('pdf/') or f.find('pdf\\') >= 0:
+                if new_output_name == '':
+                    new_output_name = temp.stem
+                args[i + 1] = '{:}/{:}.tex'.format(dir_name, new_output_name)
+            break
     return args, new_filename
 
 
@@ -376,7 +373,8 @@ def remove_template(args, output_file_name):
             # print(template_name)
             break
     if not template_found:
-        raise ValueError('\n\n\nERROR: making template, need cla: --template=/template name... command line option!\nAborting.\n\n')
+        raise ValueError('\n\n\nERROR: making template, need cla: --template=/template name... command line option!\n'
+            f'Args are {args}\nAborting.\n\n')
         return
     args, trash = adjust_output_file(args, dir_name, output_file_name)
     return args, template_name
@@ -454,11 +452,15 @@ def proc_files(base_dir):
     for ffn in ffns:
         fn = os.path.split(ffn)[1][:-3]
         # print(f'calling main {ffn}, {fn}')
-        main("", ffn, fn)
+        markdown_make_main("", ffn, fn)
 
 
-def get_default_yaml(fn):
+def parse_yaml(fn):
     """
+    read fn
+    if has yaml, read and parse it, return ydic
+
+    if no yaml find local_build.yaml file, read and parse it, return
     Find and read the default yaml file for fn, fn = full path to markdown file
     as passed to markdown make as argv[1]
 
@@ -473,45 +475,59 @@ def get_default_yaml(fn):
     Returns populated ydic
 
     """
+
+    PATTERN = re.compile(r'''^([a-zA-Z\-]+) *: *([^\n]+)$''')
     ydic = {}
-    PATTERN = re.compile(r'''((?:[^:"']|"[^"]*"|'[^']*')+)''')
-    yaml = False
+
     p = pathlib.Path(fn)
-    fn_ = p.stem
-    dn = p.parents[0]
+    full_txt = p.open('r', encoding='utf-8').read()
+    has_yaml = (full_txt[:3] == '---')
 
-    # look for local build file
-    for path in p.parents:
-        pl = path / LOCAL_YAML
-        if pl.exists():
-            print('Using default yaml {:}'.format(pl))
-            break
-
-    with open(pl, 'r', encoding='UTF-8') as g:
-        # read in (when processing burst pages ydic is passed in)
-        for l in g:
-            if l == '---\n':
-                yaml = not yaml
-            if not yaml:
+    if has_yaml:
+        txt = full_txt[0:full_txt[3:].find('---\n') + 7]
+        # print(txt)
+        # print()
+    else:
+        # look for local build file
+        for path in p.parents:
+            pl = path / LOCAL_YAML
+            if pl.exists():
+                print('Using default yaml {:}'.format(pl))
                 break
-            # need to only find the first :, beware : in quotes...
-            s = PATTERN.split(l)[1::2]
-            if len(s) == 2:
-                # here we are going to catch -o XXX because easier than doing later
-                ans = s[1].strip()
-                if ans[0:3] == '-o ':
-                    ans = '-o {:}{:}'.format(p.parents[0] / 'pdf' / p.stem, '.pdf')
-                if s[0] in ydic.keys():
-                    ydic[s[0]] += ans.split(' ')
-                else:
-                    ydic[s[0]] = ans.split(' ')
-    # certain things we ignore
-    for k in ['abstract']:
-        if k in ydic:
-            del ydic[k]
-    # print(ydic)
-    ydic['title'] = [p.stem.replace('_', ' ').title()]
-    return ydic
+        txt = pl.open('r', encoding='UTF-8').read()
+
+    # put header includes all on one line
+    txt = re.sub(r'\n +\-([^\n]+)', r' \1', txt, flags=re.MULTILINE)
+    # read in (when processing burst pages ydic is passed in, hummm)
+    # start in row 2
+    for l in txt.split('\n')[1:]:
+        if l == '---':
+            break
+        else:
+            # results are a 1 based array, corresponding to \1 etc.
+            # result will have two useful outputs in \1 and \2
+            s = PATTERN.split(l)
+            # print(s)
+            key, value = s[1:3]
+            # print(l, key, value)
+            if value[0:3] == '-o ':
+                value = '-o {:}{:}'.format(p.parents[0] / 'pdf' / p.stem, '.pdf')
+            if key in ydic.keys():
+                ydic[key] += value.split(' ')
+            else:
+                ydic[key] = value.split(' ')
+
+    if not has_yaml:
+        # ?! just don't put an abstract in the local_build.yaml!
+        # for k in ['abstract']:
+        #     if k in ydic:
+        #         del ydic[k]
+        ydic['title'] = [p.stem.replace('_', ' ').title()]
+
+    # for k, v in ydic.items():
+    #     print(k, v)
+    # print(ydic['cla'])
+    return full_txt, has_yaml, ydic
 
 
 def insert_date(fn):
@@ -575,9 +591,86 @@ def show_comments(txt):
 
 def update_book_bibfile():
     print('Updating bibliography file...')
-    p_from = pathlib.Path('/s/telos/biblio/library.bib')
-    p_to = pathlib.Path('/s/telos/spectral_risk_measures_monograph/docs/library.bib')
+    if PLATFORM == 'win':
+        p_from = Path('/s/telos/biblio/library.bib')
+        p_to = Path('/s/telos/spectral_risk_measures_monograph/docs/library.bib')
+    else:
+        p_from = (Path.home() / 'S/TELOS/Biblio/library.bib')
+        p_to = (Path.home() / 'S/TELOS/spectral_risk_measures_monograph/docs/library.bib')
+
     shutil.copy(p_from, p_to)
+
+
+def md_summary(filename_regex, out_name='summary', dir_path='.'):
+    """
+    Summarize Markdown files in dir_name matching filename_regex to md and html files
+
+    Stephen J. Mildenhall (c) 2017-2021
+
+    see the end of file for some helpful pointer on using the re.match clss
+    """
+
+    if not isinstance(dir_path, Path):
+        dir_path = Path(dir_path)
+
+    out_file_md =  dir_path / f'{out_name}.md'
+    out_file_html =  dir_path / f'{out_name}.html'
+    fo = out_file_md.open('w', encoding='utf-8')
+    print(out_file_md.resolve())
+    regexp = re.compile("^(#[#]*) (.*)$|^(```)")
+    tab = '\t'
+
+    # keep track of subtitles and section numbering
+    last = ['','','','','','','','']
+    nos = [0,0,0,0,0,0,0]
+    last_level = 0
+    for f in dir_path.glob(filename_regex):
+        logger.info(f.name)
+        with f.open('r', encoding='utf-8') as fh:
+            fo.write(f'\n# {f.name:s}\n\n')
+            # do not start off in a code block
+            in_code_block = False
+            for line in fh:
+                for match in regexp.finditer(line):
+                    if not in_code_block and match.group(1) != None:
+                        # matched a section: how many #s?; note match groups are 1-based lists
+                        l = len(match.group(1))
+                        if last[l] == match.group(2):
+                            # repeat, do nothing
+                            pass
+                        else:
+                            nos[l] += 1
+                            if l == 1:
+                                # top level title
+                                fo.write(f"{nos[l]:d}. **{match.group(2).strip():s}**\n")
+                            elif l == 2:
+                                # sub title, give numbers
+                                fo.write(f"\t{nos[l]:d}. {match.group(2).strip():s}\n")
+                            else:
+                                # bullets
+                                fo.write(f"{tab*(l-1)} * {match.group(2):s}\n")
+                            last[l] = match.group(2)
+                        if l < last_level:
+                            # reset deeper levels
+                            for j in range(l+1, last_level+1):
+                                nos[j] = 0
+                                last[j] = ''
+                        last_level = l
+                    elif match.group(3) != None and match.group(3) == '```':
+                        ## in out code block
+                        in_code_block = not in_code_block
+
+    fo.close()
+    # process output to HTML
+    # args = ( f"/home/steve/anaconda3/bin/pandoc --standalone --metadata title:'{out_name}' "
+    #     "-V author:'Stephen J. Mildenhall' "
+    #     "-f markdown+smart -t html --css=../css/github.css "
+    #     f"-o  {out_file_md.resolve()} {out_file_md.resolve()}")
+    # print(args)
+    # subprocess.Popen(args)
+    return out_file_md
 
 if __name__ == '__main__':
     markdown_make_main()
+
+
