@@ -35,6 +35,7 @@ v 1.0 Dec 2020 created PresentationManager from DocMaker
 """
 
 import os
+import sys
 from io import StringIO
 from pathlib import Path
 from matplotlib.pyplot import Figure
@@ -55,6 +56,8 @@ from IPython.core.magic import Magics, magics_class, line_magic, cell_magic, lin
 from IPython.core.magic_arguments import argument, magic_arguments, parse_argstring
 from IPython import get_ipython
 from titlecase import titlecase
+import pypandoc
+from pprint import PrettyPrinter
 
 # import sys
 # import re
@@ -81,41 +84,44 @@ class PresentationManager(object):
 
     """
 
-    __yaml__ = """---
-title: "{title}"
-subtitle: "{subtitle}"
-author: Stephen J. Mildenhall
-date: "{created}"
-fontsize: {font_size}pt
-outertheme : metropolis
-innertheme : metropolis
-fonttheme  : structurebold
-colortheme : orchid
-institute: \\convexmark
-classoption: t
-numbersection: true 
-toc: false
-filter: pandoc-citeproc
-bibliography: /S/TELOS/biblio/library.bib
-csl: /S/TELOS/biblio/journal-of-finance.csl
-link-citations: true
-header-includes: 
-    - \\input{{/s/telos/common/general2021.tex}}
-    - \\geometry{{paper=legalpaper, landscape, mag=2000, truedimen}}
-cla: --top-level-division=section
-cla: --slide-level=2
-cla: --standalone
-cla: -f markdown+smart+yaml_metadata_block+citations{pdf_engine}
-cla: -o pdf
-cla: --filter pandoc-citeproc
-cla: -t beamer
-debug: true
----
+#     __yaml__ = """---
+# title: "{title}"
+# subtitle: "{subtitle}"
+# author: Stephen J. Mildenhall
+# date: "{created}"
+# fontsize: {font_size}pt
+# outertheme : metropolis
+# innertheme : metropolis
+# fonttheme  : structurebold
+# colortheme : orchid
+# institute: \\convexmark
+# classoption: t
+# numbersection: true
+# toc: false
+# filter: pandoc-citeproc
+# bibliography: /S/TELOS/biblio/library.bib
+# csl: /S/TELOS/biblio/journal-of-finance.csl
+# link-citations: true
+# header-includes:
+#     - \\input{{general2021.tex}}
+#     - \\geometry{{paper=legalpaper, landscape, mag=2000, truedimen}}
+# cla: --top-level-division=section
+# cla: --slide-level=2
+# cla: --standalone
+# cla: -f markdown+smart+yaml_metadata_block+citations{pdf_engine}
+# cla: -o pdf
+# cla: --filter pandoc-citeproc
+# cla: -t beamer
+# debug: true
+# ---
+#
+# """
 
-"""
-
-    def __init__(self, config_file, tops_id, tidy=False):
+    def __init__(self, config_file):
         """
+        builds_id -> specification of portfolio, key, base_dir etc.
+        tops_id = None -> make contents etc.
+
 
         Originally:
         title, subtitle, key, base_dir, *,
@@ -169,20 +175,94 @@ debug: true
 
         """
 
-        config = json.load(Path(f'{config_file}.config').open('r', encoding='utf-8'))
-        self.tops_id = tops_id
+        self.config_all = json.load(Path(config_file).open('r', encoding='utf-8'))
+        self.config_file = config_file
+        self.builds_id = None
 
-        self.title = config['title']
-        self.key = config['key']
-        # tured to Path below
-        base_dir = config['base_dir']
-        self.top_name = config['top_name']
-        self.fig_format = config['fig_format']
-        self.output_style = config['output_style']
-        self.pdf_engine = config['pdf_engine']
+    def activate_build(self, builds_id):
+        """
+        Spec for portfolio etc.
 
+        :param builds_id:
+        :return:
+        """
+        self.builds_id = builds_id
+
+        # specification of course, portfolio etc.
+        self.config = self.config_all['builds'][builds_id]
+
+        # read in builds level global variables
+        self.title = self.config['title']
+        self.key = self.config['key']
+        self.base_dir = Path(self.config['base_dir'])
+        self.top_name = self.config['top_name']
+        self.fig_format = self.config['fig_format']
+        self.output_style = self.config['output_style']
+        self.pdf_engine = self.config['pdf_engine']
+        self.unit = self.config['unit']
+        self.capital_standard = self.config['capital_standard']
+
+    def __getitem__(self, item):
+        if item in self.config:
+            return self.config[item]
+        else:
+            raise ValueError(f'Error, {self} has no item {item}.')
+
+    @property
+    def builds(self):
+        """
+        list builds in the config file
+        :return:
+        """
+        s = ''
+        for k, v in self.config_all['builds'].items():
+            s += f'* `{k}` {v["description"]}{", **active**" if k==self.builds_id else ""}\n'
+        return Markdown(s)
+
+    @property
+    def tops(self):
+        """
+        list tops in the config file
+        :return:
+        """
+        s = '| top_value | key | Subtitle | File |\n' \
+            '|:----:|:------|:--------------------------------------|:--------------------|\n'
+        for k, v in self.config_all['tops'].items():
+            s += f'| `{v["top_value"]}` | {k} | {v["subtitle"]} | {v["file"]}|\n'
+        return Markdown(s)
+
+    def pretty(self, kind='all'):
+        """
+        pretty print the config file
+        :param kind:
+        :return:
+        """
+        pp = PrettyPrinter(indent=2, width=100, compact=False, sort_dicts=False).pprint
+        if kind in ['a',  'all']:
+            pp(self.config_all)
+        elif kind in ['b', 'build', 'builds']:
+            pp(self.config)
+        elif kind in ['t', 'top', 'tops']:
+            pp(self.config_all['tops'])
+        elif kind in ['gross', 'g']:
+            pp(self.config['gross_portfolio'])
+        elif kind in ['net', 'n']:
+            pp(self.config['net_portfolio'])
+
+    def activate_top(self, tops_id, tidy=False):
+        """
+        Activate presentation for a particular top level part, chapter, module (the top_name)
+        Corresponds to the different ipymd/md files that do the work to make the presentations.
+
+        Output focus; the book of business is defined in builds
+
+        :param tops_id:
+        :param tidy:
+        :return:
+        """
         # for this specific document
-        top = config['tops'][tops_id]
+        self.tops_id = tops_id
+        top = self.config_all['tops'][tops_id]
         self.subtitle = top['subtitle']
         self.top_value = top['top_value']
 
@@ -196,7 +276,6 @@ debug: true
         self.default_table_font_size = 0.15
 
         # main file for output and ancillary directories
-        self.base_dir = Path(base_dir)
         self.file = self.base_dir / self.file_name
         logger.info(f'base_dir = {self.base_dir.resolve()}')
         logger.info(f'output file = {self.file.resolve()}')
@@ -223,7 +302,7 @@ debug: true
         self._slides = set()
         self.sios = OrderedDict(contents=StringIO(), summary=StringIO(), body=StringIO(), appendix=StringIO())
 
-        # starts in base config: active and not in debug mode
+        # starts in base self.config: active and not in debug mode
         self._tacit_override = False
         self._active = True
         self._debug = False
@@ -232,9 +311,15 @@ debug: true
         # start by writing the toc header
         self._write_buffer_('contents', '## Contents\n')
 
-        # store for future use
-        self.config = config
-        self.config_file = config_file
+    def describe_portfolio(self):
+        """
+        return markdown description of portfolio
+        :return:
+        """
+        s = ''
+        for k, (ln, d) in self['line_descriptions'].items():
+            s += f'* `{k}`: {ln}{d}\n'
+        return s
 
     @property
     def debug(self):
@@ -359,11 +444,14 @@ debug: true
 
         slide_caption = self.make_title(label)
         label = self.make_safe_label(label)
-        fig_file = self.figure_dir / f'{self.key}-{label}.{self.fig_format}'
-        fig_file_local = f'img/{self.key}-{label}.{self.fig_format}'
+        fig_file = self.figure_dir / f'{self.key}-{self.top_value}-{label}.{self.fig_format}'
+        fig_file_local = f'img/{fig_file.name}'
         if fig_file.exists():
             logger.warning(f'File {fig_file} already exists...over-writing.')
-        f.savefig(fig_file, **kwargs)
+        if self.fig_format == 'png' and 'dpi' not in kwargs:
+            kwargs['dpi'] = 600
+            logger.info("adding dpi")
+        f.savefig(fig_file,  **kwargs)
 
         # not the caption, that can contain tex
         if not self.clean_underscores(caption):
@@ -384,16 +472,22 @@ debug: true
             fig_text += '  \\'
         fig_text += '\n\n'
         if new_slide and not promise:
-            self._write_buffer_(buf, f'## {slide_caption}\n\n')
-            if not tacit:
-                display(Markdown(f'## {slide_caption}'))
-        if promise:
+            # need to write in one row so that debug mode write correctly to dm.md
+            text_out = f'## {slide_caption}\n\n{fig_text}'
+        elif not promise:
+            # not new slide, not promise
+            text_out = fig_text
+        elif promise:
+            # don't write anything
             return fig_text
         else:
-            self._write_buffer_(buf, fig_text)
+            raise ValueError('Unexpected ')
+
+        # actually write output
+        self._write_buffer_(buf, text_out)
 
         if self.tacit_override or not tacit:
-            display(Markdown(fig_text))
+            display(Markdown(text_out))
 
     def table(self, df, label, *, caption="", buf='body', float_format=None, fill_nan='', font_size=0.0,
               sparsify=False, force_float=False, multipart=0, new_slide=True, tacit=False, promise=False, **kwargs):
@@ -674,10 +768,11 @@ debug: true
                              show_index=show_index, scale=scale,
                              figure=figure, hrule=hrule, vrule=vrule, sparsify=sparsify, clean_index=True)
 
-        table_file = self.table_dir / f'{self.key}-{label}.md'
+        # TODO: this does not work well with debug mode...rationalize the outputs!
+        table_file = self.table_dir / f'{self.key}-{self.top_value}-{label}.md'
         if table_file.exists():
             logger.warning(f'File {table_file} exists, over-wriring.')
-        table_file_local = f'table/{self.key}-{label}.md'
+        table_file_local = f'table/{table_file.name}'
 
         if new_slide and not promise:
             self._write_buffer_(buf, f'## {slide_caption}\n\n')
@@ -904,7 +999,7 @@ debug: true
         """
         if mode in ('single', 'both'):
             subtitle = f'{self.top_name} {self.top_value}: {self.subtitle}'
-            y = self.__yaml__.format(
+            y = self['yaml'].format(
                     title=self.title, subtitle=subtitle, created=self.date(),
                     font_size=font_size, pdf_engine=self.pdf_engine)
             with self.file.open('w', encoding='UTF-8') as f:
@@ -952,7 +1047,7 @@ debug: true
                     s_ = f'{sec_no:0>2d}' if sec_no > 0 else int_to_roman(-sec_no)
                     fsec_no = f'{top_no}.{s_}'
                     self.make_toc(decorate=sec_no)
-                    y = self.__yaml__.format(
+                    y = self['yaml'].format(
                             title=f'{self.top_name} {self.top_value}: {self.subtitle}',
                             subtitle=section, created=self.date(),
                             font_size=font_size, pdf_engine=self.pdf_engine)
@@ -966,6 +1061,16 @@ debug: true
                             f.write('\n\n')
                         f.write(f'\n\n# {top_no}.{sec_no}. {section.strip()}\n\n')
                         f.write(content)
+
+    def finish(self):
+        """
+        json driven last steps, reads font size and mode (single, both burst) from the config file
+
+        :return:
+        """
+        font_size = self.config['font_size']
+        mode = self.config['mode']
+        self.buffer_persist(font_size, tacit=True, mode=mode)
 
     def process(self, font_size=9, tacit=True):
         """
@@ -1055,73 +1160,73 @@ debug: true
                 idx = idx.set_levels(repl, level=i)
         return idx
 
-    def format_source(self, md_file, to='html', title=''):
-        """
-        Print out the source file to md_file and Pandoc if installed
-
-        md_file is the name of the md (JupyText linked!) that creates the presentation.
-
-        MUST use md linking through JupyText
-
-        :param to: output format: html or pdf
-        :param md_file:
-        :return:
-        """
-
-        header = """---
-title: Source Code
-author: Stephen J. Mildenhall
-date: created
-geometry: hmargin=1in, vmargin=.75in
-fontsize: 9pt
-classoption: a4paper, landscape
-header-includes: \\input{{/s/telos/common/general.tex}}
-cla: --standalone
-cla: -f markdown+smart+yaml_metadata_block+citations
-cla: --pdf-engine=xelatex
-cla: -o pdf
-cla: --filter pandoc-citeproc
-cla: -t latex
-cla: --template=/S/TELOS/Common/sjm-doc-template.tex
-debug: true
----
-
-"""
-        if isinstance(md_file, Path):
-            p = md_file
-        else:
-            p = Path(md_file)
-        # only working with markdown files
-        if p.suffix != '.md':
-            raise ValueError('format_source only works with markdown .md files')
-
-        if to == 'html':
-            CREATE_NO_WINDOW = 0x08000000
-            source_output_file = self.base_dir / f'{self.key}-source.html'
-            logger.info(f'Making {source_output_file}')
-            css = filename('S/TELOS/PIRC/css/github.css')
-            if title == "":
-                title = p.stem
-            command = f'pandoc -f markdown -t html -o {source_output_file.resolve()} -s ' \
-                        f'--metadata title="{title}" '  \
-                        f'--css={css} {p.resolve()}'
-            logger.info(f'Executing: {command}')
-            if platform()[:5] == 'Linux':
-                p = subprocess.Popen(command, stdout=subprocess.PIPE)
-            else:
-                p = subprocess.Popen(command, creationflags=CREATE_NO_WINDOW, stdout=subprocess.PIPE)
-            p.communicate()
-
-        elif to == 'pdf':
-            with p.open('r', encoding='utf-8') as f:
-                txt = f.read()
-            source_output_file = self.base_dir / f'{self.key}-source.md'
-            with source_output_file.open('w', encoding='utf-8') as f:
-                f.write(header + txt)
-            self.make_beamer(source_output_file)
-        else:
-
-            raise ValueError(f'Unknown option to = {to}; pdf and html are valid options.')
+#     def format_source(self, md_file, to='html', title=''):
+#         """
+#         Print out the source file to md_file and Pandoc if installed
+#
+#         md_file is the name of the md (JupyText linked!) that creates the presentation.
+#
+#         MUST use md linking through JupyText
+#
+#         :param to: output format: html or pdf
+#         :param md_file:
+#         :return:
+#         """
+#
+#         header = """---
+# title: Source Code
+# author: Stephen J. Mildenhall
+# date: created
+# geometry: hmargin=1in, vmargin=.75in
+# fontsize: 9pt
+# classoption: a4paper, landscape
+# header-includes: \\input{{/s/telos/common/general.tex}}
+# cla: --standalone
+# cla: -f markdown+smart+yaml_metadata_block+citations
+# cla: --pdf-engine=xelatex
+# cla: -o pdf
+# cla: --filter pandoc-citeproc
+# cla: -t latex
+# cla: --template=/S/TELOS/Common/sjm-doc-template.tex
+# debug: true
+# ---
+#
+# """
+#         if isinstance(md_file, Path):
+#             p = md_file
+#         else:
+#             p = Path(md_file)
+#         # only working with markdown files
+#         if p.suffix != '.md':
+#             raise ValueError('format_source only works with markdown .md files')
+#
+#         if to == 'html':
+#             CREATE_NO_WINDOW = 0x08000000
+#             source_output_file = self.base_dir / f'{self.key}-source.html'
+#             logger.info(f'Making {source_output_file}')
+#             css = filename('S/TELOS/PIRC/css/github.css')
+#             if title == "":
+#                 title = p.stem
+#             command = f'pandoc -f markdown -t html -o {source_output_file.resolve()} -s ' \
+#                         f'--metadata title="{title}" '  \
+#                         f'--css={css} {p.resolve()}'
+#             logger.info(f'Executing: {command}')
+#             if platform()[:5] == 'Linux':
+#                 p = subprocess.Popen(command, stdout=subprocess.PIPE)
+#             else:
+#                 p = subprocess.Popen(command, creationflags=CREATE_NO_WINDOW, stdout=subprocess.PIPE)
+#             p.communicate()
+#
+#         elif to == 'pdf':
+#             with p.open('r', encoding='utf-8') as f:
+#                 txt = f.read()
+#             source_output_file = self.base_dir / f'{self.key}-source.md'
+#             with source_output_file.open('w', encoding='utf-8') as f:
+#                 f.write(header + txt)
+#             self.make_beamer(source_output_file)
+#         else:
+#
+#             raise ValueError(f'Unknown option to = {to}; pdf and html are valid options.')
 
     def make_beamer(self, path_file):
         """
@@ -1139,6 +1244,201 @@ debug: true
             os.chdir(self.base_dir)
             markdown_make_main("", path_file.name, path_file.stem)
             os.chdir(cwd)
+
+    def course_contents(self):
+        """
+        List of modules and links
+        :return:
+        """
+        sio = StringIO()
+        p = Path('../generated/pdf')
+        i = 65
+        for k, v in self.config['tops'].items():
+            fn = f'pirc-{v["top_value"]}.pdf'
+            print((p/fn).resolve())
+            if (p/fn).exists():
+                sio.write(f'* [{chr(i)}. {v["subtitle"]}](pirc/{fn})\n')
+            else:
+                sio.write(f'* {chr(i)}. {v["subtitle"]} (coming soon)\n')
+            i += 1
+        md = sio.getvalue()
+        html = pypandoc.convert(md, 'html', 'markdown')
+        with Path('../generated/html/pirc-course-contents.html').open('w', encoding='utf-8') as f:
+            f.write(html)
+
+        return md, html
+
+    def summarize(self):
+        """
+        Summarize from config file
+
+        based on markdown_make.md_summary()
+
+        Stephen J. Mildenhall (c) 2021
+        """
+
+        # sio = full summary
+        # short = short summary that goes to website
+        sio = StringIO()
+        short = StringIO()
+
+        # start by pretty printing the config file
+        sio.write(f'# **{self.title}** Configuration File\n')
+
+        sio.write('## Project Level Parameters\n\n')
+
+        for k, v in self.config.items():
+            if k == 'tops': break
+            sio.write(f'* `{k}` {v}\n')
+
+        top_name = self.config['top_name']
+        sio.write(f'\n### {top_name} Contents\n')
+        tops = self.config['tops']
+        for k, v in tops.items():
+            tv = v['top_value']
+            st = v['subtitle']
+            sio.write(f'* `{tv}` {st}\n')
+
+        sio.write(f'\n### Portfolio Specification\n')
+        sio.write(f'\n#### Gross\n')
+        sio.write(f'```\n{self.config["gross_portfolio"].strip()}\n```\n\n')
+        sio.write(f'\n#### Net\n')
+        sio.write(f'```\n{self.config["net_portfolio"].strip()}\n```\n\n')
+
+        sio.write('## Individual Module Contents\n')
+
+        regexp = re.compile("^(#[#]*) (.*)$|^(```)")
+        tab = '\t'
+
+        # keep track of subtitles and section numbering
+        dir_path = Path('../generated')
+        last = ['','','','','','','','']
+        nos = [0,0,0,0,0,0,0]
+        last_level = 0
+        # cut out duplicates
+        last_slide = ''
+        for v in tops.values():
+            k = v['top_value']
+            f = dir_path / f"pirc-{k}.md"
+            st = v['subtitle']
+            logger.info(f.name)
+            if f.exists():
+                # fourth argument returns before doing any real work
+                logger.info(f'processing {f}')
+                resolved_f = markdown_make_main('', str(f), f.stem, None)
+                resolved_f = Path(resolved_f)
+                content_f = dir_path / f"pdf/pirc-{k}.pdf"
+                if content_f.exists():
+                    updated = f'{datetime.fromtimestamp(content_f.stat().st_mtime):%Y-%m-%d %H:%M:%S%z} UTZ'
+                else:
+                    updated = 'not created'
+                with resolved_f.open('r', encoding='utf-8') as fh:
+                    linked_st = f'[{st}](pirc-{k}.pdf)'
+                    sio.write(f'\n### {k}. {linked_st}\n\n')
+                    short.write(f'* {k}. {linked_st}\n')
+                    # do not start off in a code block
+                    in_code_block = False
+                    for line in fh:
+                        for match in regexp.finditer(line):
+                            if not in_code_block and match.group(1) != None:
+                                # matched a section: how many #s?; note match groups are 1-based lists
+                                l = len(match.group(1))
+                                if last[l] == match.group(2):
+                                    # repeat, do nothing
+                                    pass
+                                else:
+                                    # get rid of labels
+                                    s = re.sub(r'\\label.*$', r'', match.group(2).strip())
+                                    if l == 1:
+                                        # presentation section level, no duplicates
+                                        nos[l] += 1
+                                        sio.write(f"* **{s:s}**\n")
+                                        if s != 'Table of Contents' and s[:8] != 'Appendix':
+                                            short.write(f'\t* {s}\n')
+                                    elif l == 2:
+                                        # slide give numbers
+                                        if s.strip() == last_slide:
+                                            pass
+                                        else:
+                                            nos[l] += 1
+                                            last_slide = s.strip()
+                                            sio.write(f"\t{nos[l]:d}. {s:s}\n")
+                                    else:
+                                        # bullets
+                                        nos[l] += 1
+                                        sio.write(f"{tab*(l-1)}* {match.group(2):s}\n")
+                                        # if l == 3:
+                                        #     short.write(f"{tab*(l-1)}* {match.group(2):s}\n")
+                                    last[l] = match.group(2)
+                                if l < last_level:
+                                    # reset deeper levels
+                                    for j in range(l+1, last_level+1):
+                                        nos[j] = 0
+                                        last[j] = ''
+                                last_level = l
+                            elif match.group(3) != None and match.group(3) == '```':
+                                ## in out code block
+                                in_code_block = not in_code_block
+                    short.write(f'\t* Last pdf update {updated}\n')
+                # be tidy
+                resolved_f.unlink()
+            else:
+                sio.write(f'\n## {k}. {st} (file does not exist)\n\n')
+                short.write(f'* {k}. {st} (coming soon)\n')
+
+        long_md = sio.getvalue()
+        short_md = short.getvalue()
+        short_html = pypandoc.convert(short_md, 'html', 'markdown')
+        stripper = 'Individual Module Contents'
+        long_html = pypandoc.convert(long_md[long_md.find(stripper) + len(stripper):], 'html', 'markdown')
+
+        with Path('../generated/html/pirc-short-contents.html').open('w', encoding='utf-8') as f:
+            f.write(short_html)
+        with Path('../generated/html/pirc-long-contents.html').open('w', encoding='utf-8') as f:
+            f.write(long_html)
+
+        return long_md, short_md
+
+        # process output to HTML
+        # out_file_html = dir_path / f'{out_name}.html'
+        # args = ( f"/home/steve/anaconda3/bin/pandoc --standalone --metadata title:'{out_name}' "
+        #     "-V author:'Stephen J. Mildenhall' "
+        #     "-f markdown+smart -t html --css=../css/github.css "
+        #     f"-o  {out_file_md.resolve()} {out_file_md.resolve()}")
+        # print(args)
+        # subprocess.Popen(args)
+
+    def uber_deck(self, subtitle, font_size=9, pdf_engine='cla: --pdf-engine=lualatex'):
+        """
+        make a deck combining all available markdpown files
+
+        :return:
+        """
+        sio = StringIO()
+        # generally need a beefier engine to build this deck...
+        y = self['yaml'].format(
+                title=self.title, subtitle=subtitle, created=self.date(),
+                font_size=font_size, pdf_engine=pdf_engine)
+        sio.write(f'{y}\n')
+        for fn in sorted(self.base_dir.glob(f'{self.key}-?.md')):
+            with fn.open('r', encoding='utf-8') as f:
+                txt = f.read()
+                lines = txt.split('\n')
+                in_text = False
+                for i, ln in enumerate(lines[1:]):
+                    if in_text:
+                        sio.write(f'{ln}\n')
+                    elif ln == '---':
+                        in_text = True
+                    elif ln[:10] == 'subtitle: ':
+                        print(f'Found section: {ln[11:-1]}')
+                        sio.write(f'\\grttopdivider{{{ln[11:-1]}}}\n')
+                    else:
+                        # yaml line, ignored
+                        pass
+        out = self.base_dir / f'{self.key}_uber.md'
+        with out.open('w', encoding='utf-8') as f:
+            f.write(sio.getvalue())
 
 
 @magics_class
@@ -1415,7 +1715,7 @@ def _sparsify(col):
 
 
 def df_to_tikz(df, *, fn_out=None, float_format=None, tabs=None,
-               show_index=True, scale=0.717, height=1, column_sep=1/2, row_sep=1/8,
+               show_index=True, scale=0.717, column_sep=3/8, row_sep=1/8,
                figure='figure', color='blue!0', extra_defs='', hrule=None,
                vrule=None, post_process='', label='', caption='',
                sparsify=1, clean_index=False):
@@ -1445,6 +1745,8 @@ def df_to_tikz(df, *, fn_out=None, float_format=None, tabs=None,
 
     sparsify  number of cols of multi index to sparsify
 
+    Issue: colun with floats and spaces or missing causess problems (VaR, TVaR, EPD, mean and CV table) 
+
     keyword args:
         scale           scale applied to whole table - default 0.717
         height          row height, rec. 1 (em)
@@ -1467,7 +1769,6 @@ def df_to_tikz(df, *, fn_out=None, float_format=None, tabs=None,
     :param tabs:
     :param show_index:
     :param scale:
-    :param height:
     :param column_sep:
     :param row_sep:
     :param figure:
@@ -1489,12 +1790,13 @@ def df_to_tikz(df, *, fn_out=None, float_format=None, tabs=None,
 \\begin{{tikzpicture}}[
     auto,
     transform shape,
+    nosep/.style={{inner sep=0}},
     table/.style={{
         matrix of nodes,
         row sep={row_sep}em,
         column sep={column_sep}em,
         nodes in empty cells,
-        nodes={{draw={color}, rectangle, scale={scale}, text height={height}em, text badly ragged}},
+        nodes={{draw={color}, rectangle, scale={scale}, text badly ragged}},
 """
 
     footer = """
@@ -1543,6 +1845,8 @@ def df_to_tikz(df, *, fn_out=None, float_format=None, tabs=None,
     else:
         nc_index = 0
 
+    # df = df.astype(float, errors='ignore')
+
     if nc_index:
         if vrule is None:
             vrule = set()
@@ -1560,63 +1864,8 @@ def df_to_tikz(df, *, fn_out=None, float_format=None, tabs=None,
     # internal TeX code
     matrix_name = hex(abs(hash(str(df))))
 
-    # this affects how the table is printed in the md file
-    # tabs from _tabs, an estimate column widths, determines the size of the table columns as displayed
-    colw = dict.fromkeys(df.columns,  0)
-    headw = dict.fromkeys(df.columns,  0)
-    _tabs = []
-    mxmn = {}
-    nl = df.index.nlevels
-    for i, c in enumerate(df.columns):
-        # figure width of the column labels; if index c= str, if MI then c = tuple
-        # cw is the width of the column header/title
-        if type(c) == str:
-            if i < nl:
-                cw = len(c)
-            else:
-                # for data columns look at words rather than whole phrase
-                cw = max(map(len, c.split(' ')))
-                # logger.info(f'leng col = {len(c)}, longest word = {cw}')
-        else:
-            # could be float etc.
-            try:
-                cw = max(map(lambda x: len(wfloat_format(x)), c))
-            except TypeError:
-                # not a MI, float or something
-                cw = len(str(c))
-        headw[c] = cw
-        # now figure the width of the elements in the column
-        # mxmn is used to determine whether to center the column (if all the same size)
-        if df.dtypes[c] == object:
-            # 1.2 allows more capitals in the heading
-            # colw[c] = max(0, max(df[c].str.len().max(), cw))
-            colw[c] = df[c].str.len().max()
-            mxmn[c] = (df[c].str.len().max(), df[c].str.len().min())
-        else:
-            _ = list(map(lambda x: len(wfloat_format(x)), df[c]))
-            # colw[c] = max(0, max(max(_), cw))
-            colw[c] = max(_)
-            mxmn[c] = (max(_), min(_))
-
-    if tabs is None:
-        # now know all column widths...decide what to do
-        # are all the columns about the same width?
-        data_cols = np.array([colw[k] for k in df.columns[nl:]])
-        same_size = (data_cols.std() <= 0.1 * data_cols.mean())
-        common_size = 0
-        if same_size:
-            common_size = data_cols.mean() + data_cols.std()
-            logger.info(f'data cols appear same size = {common_size}')
-        for i, c in enumerate(df.columns):
-            if i < nl or not same_size:
-                # index columns
-                _tabs.append(max(colw[c], headw[c]))
-            else:
-                # data all seems about the same width
-                _tabs.append(common_size)
-        print(_tabs)
-        tabs = _tabs
-
+    colw, mxmn, tabs = guess_column_widths(df, float_format=wfloat_format, tabs=tabs)
+    # print(colw, tabs)
     logger.debug(f'tabs: {tabs}')
 
     # alignment dictionaries
@@ -1639,21 +1888,29 @@ def df_to_tikz(df, *, fn_out=None, float_format=None, tabs=None,
     # start writing
     sio = StringIO()
     sio.write(header.format(figure=figure, extra_defs=extra_defs, color=color,
-                            scale=scale, height=height, column_sep=column_sep,
+                            scale=scale, column_sep=column_sep,
                             row_sep=row_sep))
 
     # table header
     # title rows
     for i in range(1, nr_columns+1):
-        sio.write(f'\trow {i}/.style={{nodes={{text=black, font=\\bfseries}}}},\n')
+        sio.write(f'\trow {i}/.style={{nodes={{text=black, anchor=north, inner ysep=.2em, font=\\bfseries}}}},\n')
 
     # write column spec
     for i, w, al in zip(range(1, len(align)+1), tabs, align):
         # average char is only 0.48 of M
         # https://en.wikipedia.org/wiki/Em_(gtypography)
-        sio.write(f'\tcolumn {i}/.style={{' # baseline, '
-                  f'nodes={{align={ad[al]:<6s}}}, text width={max(2, 0.6 * w):.2f}em, '
-                  f'inner xsep=0, inner ysep=0}},\n')
+        if i == 1:
+            # first column sets row height for entire row
+            sio.write(f'\tcolumn {i:>2d}/.style={{' 
+                  f'nodes={{align={ad[al]:<6s}}}, text height=0.9em, text depth=0.2em, '
+                  f'inner xsep={column_sep}em, inner ysep=0, '
+                  f'text width={max(2, 0.6 * w):.2f}em}},\n')
+        else:
+            sio.write(f'\tcolumn {i:>2d}/.style={{' 
+                  f'nodes={{align={ad[al]:<6s}}}, nosep, text width={max(2, 0.6 * w):.2f}em}},\n')
+    # extra col to right which enforces row height
+    sio.write(f'\tcolumn {i+1:>2d}/.style={{text height=0.9em, text depth=0.2em, nosep, text width=0em}}')
     sio.write('\t}]\n')
 
     sio.write("\\matrix ({matrix_name}) [table, ampersand replacement=\\&]{{\n".format(matrix_name=matrix_name))
@@ -1667,16 +1924,17 @@ def df_to_tikz(df, *, fn_out=None, float_format=None, tabs=None,
                 c = wfloat_format(c)
                 s = f'{nl} {{cell:{ad2[al]}{colw[cn]}s}} '
                 nl = '\\&'
-                sio.write(s.format(cell=c))
-            sio.write('\\\\\n')
+                sio.write(s.format(cell=c + '\\grtspacer'))
+            # include the blank extra last column
+            sio.write('\\& \\\\\n')
     else:
         nl = ''
         for c, al in zip(df.columns, align):
             c = wfloat_format(c)
             s = f'{nl} {{cell:{ad2[al]}{colw[c]}s}} '
             nl = '\\&'
-            sio.write(s.format(cell=c))
-        sio.write('\\\\\n')
+            sio.write(s.format(cell=c + '\\grtspacer'))
+        sio.write('\\& \\\\\n')
 
     # write table entries
     for idx, row in df.iterrows():
@@ -1686,7 +1944,9 @@ def df_to_tikz(df, *, fn_out=None, float_format=None, tabs=None,
             s = f'{nl} {{cell:{ad2[al]}{colw[c]}s}} '
             nl = '\\&'
             sio.write(s.format(cell=cell))
-        sio.write('\\\\\n')
+            # if c=='p':
+            #     print('COLp', cell, type(cell), s, s.format(cell=cell))
+        sio.write('\\& \\\\\n')
     sio.write(f'}};\n\n')
 
     # decorations and post processing - horizontal and vertical lines
@@ -1714,27 +1974,27 @@ def df_to_tikz(df, *, fn_out=None, float_format=None, tabs=None,
     ls = 'thick'
     ln = 1
     sio.write(f'\\path[draw, {ls}] ([yshift={yshift}em]{matrix_name}-{ln}-1.north west)  -- '
-              f'([yshift={yshift}em]{matrix_name}-{ln}-{nc}.north east);\n')
+              f'([yshift={yshift}em]{matrix_name}-{ln}-{nc+1}.north east);\n')
 
     for ln in hrule:
         ls = 'thick' if ln == nr + nr_columns + 1 else ('semithick' if ln == 1 + nr_columns else 'very thin')
         if ln <= nr:
             # line above TeX row ln+1 that exists
             sio.write(f'\\path[draw, {ls}] ([yshift={yshift}em]{matrix_name}-{ln}-1.north west)  -- '
-                      f'([yshift={yshift}em]{matrix_name}-{ln}-{nc}.north east);\n')
+                      f'([yshift={yshift}em]{matrix_name}-{ln}-{nc+1}.north east);\n')
         else:
             # line above row below bottom = line below last row
             # descenders are 200 to 300 below baseline
             ln = nr
-            sio.write(f'\\path[draw, thick] ([yshift={-height*descender_proportion-yshift}em]{matrix_name}-{ln}-1.base west)  -- '
-                      f'([yshift={-height*descender_proportion-yshift}em]{matrix_name}-{ln}-{nc}.base east);\n')
+            sio.write(f'\\path[draw, thick] ([yshift={-descender_proportion-yshift}em]{matrix_name}-{ln}-1.base west)  -- '
+                      f'([yshift={-descender_proportion-yshift}em]{matrix_name}-{ln}-{nc+1}.base east);\n')
 
     if vrule:
         # to left of col, 1 based, includes index
         ls = 'very thin'
         for cn in vrule:
             sio.write(f'\\path[draw, {ls}] ([yshift={yshift}em, xshift={xshift}em]{matrix_name}-1-{cn}.north west)  -- '
-                      f'([yshift={-height*descender_proportion-yshift}em, xshift={xshift}em]{matrix_name}-{nr}-{cn}.base west);\n')
+                      f'([yshift={-descender_proportion-yshift}em, xshift={xshift}em]{matrix_name}-{nr}-{cn}.base west);\n')
 
     if label == '':
         lt = ''
@@ -1744,7 +2004,7 @@ def df_to_tikz(df, *, fn_out=None, float_format=None, tabs=None,
         label = f'\\label{{tab:{label}}}'
     if caption == '':
         if label != '':
-            logger.warning(f'You have a lable but no caption; the label {label} will be ignored.')
+            logger.warning(f'You have a label    but no caption; the label {label} will be ignored.')
         caption = '% caption placeholder'
     else:
         caption = f'\\caption{{{caption} {label}}}'
@@ -1765,6 +2025,88 @@ def df_to_tikz(df, *, fn_out=None, float_format=None, tabs=None,
                 f.write(f'\n\n# A section\nSome text. And a reference \\cref{{{lt}}}')
 
     return sio.getvalue()
+
+
+def guess_column_widths(df, float_format, tabs=None):
+    """
+    estimate sensible column widths for the dataframe [in what units?]
+
+    :param df:
+    :param float_format:
+    :param tabs:
+    :return:
+        colw   affects how the table is printed in the md file (actual width of data elements)
+        mxmn   affects aligmnent: are all columns the same width?
+        tabs   affecets the actual output
+    """
+
+    # this
+    # tabs from _tabs, an estimate column widths, determines the size of the table columns as displayed
+    colw = dict.fromkeys(df.columns,  0)
+    headw = dict.fromkeys(df.columns,  0)
+    _tabs = []
+    mxmn = {}
+    nl = df.index.nlevels
+    for i, c in enumerate(df.columns):
+        # figure width of the column labels; if index c= str, if MI then c = tuple
+        # cw is the width of the column header/title
+        if type(c) == str:
+            if i < nl:
+                cw = len(c)
+            else:
+                # for data columns look at words rather than whole phrase
+                cw = max(map(len, c.split(' ')))
+                # logger.info(f'leng col = {len(c)}, longest word = {cw}')
+        else:
+            # could be float etc.
+            try:
+                cw = max(map(lambda x: len(float_format(x)), c))
+            except TypeError:
+                # not a MI, float or something
+                cw = len(str(c))
+        headw[c] = cw
+        # now figure the width of the elements in the column
+        # mxmn is used to determine whether to center the column (if all the same size)
+        if df.dtypes[c] == object:
+            # wierdness here were some objects actually containn floats, str evaluates to NaN
+            # and picks up width zero
+            try:
+                _ = list(map(lambda x: len(float_format(x)), df[c]))
+                colw[c] = max(_)
+                mxmn[c] = (max(_), min(_))
+            except:
+                e = sys.exc_info()[0]
+                print(c, 'ERROR', e)
+                logger.error(f'{c} error {e} DO SOMETHING ABOUT THIS...if it never occurs dont need the if')
+                colw[c] = df[c].str.len().max()
+                mxmn[c] = (df[c].str.len().max(), df[c].str.len().min())
+        else:
+            _ = list(map(lambda x: len(float_format(x)), df[c]))
+            colw[c] = max(_)
+            mxmn[c] = (max(_), min(_))
+        # debugging grief
+        # if c == 'p':
+        #     print(c, df[c], colw[c], mxmn[c], list(map(len, list(map(float_format, df[c])))))
+    if tabs is None:
+        # now know all column widths...decide what to do
+        # are all the columns about the same width?
+        data_cols = np.array([colw[k] for k in df.columns[nl:]])
+        same_size = (data_cols.std() <= 0.1 * data_cols.mean())
+        common_size = 0
+        if same_size:
+            common_size = int(data_cols.mean() + data_cols.std())
+            logger.info(f'data cols appear same size = {common_size}')
+        for i, c in enumerate(df.columns):
+            if i < nl or not same_size:
+                # index columns
+                _tabs.append(int(max(colw[c], headw[c])))
+            else:
+                # data all seems about the same width
+                _tabs.append(common_size)
+        logger.info(f'Determined tab spacing: {_tabs}')
+        tabs = _tabs
+
+    return colw, mxmn, tabs
 
 
 def de_underscore(df, which='b'):

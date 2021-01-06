@@ -26,6 +26,7 @@ import re
 from pathlib import Path
 from platform import platform
 import logging
+from io import StringIO
 
 logger = logging.getLogger('aggregate')
 
@@ -87,22 +88,25 @@ def markdown_make_main(*argv):
     :return:
     """
 
-    print(f'Operating system: {PLATFORM}')
-
     def dp(x):
         logger.debug(x)
 
-    print('DEC 29 2020 VERSION ' * 5)
+    print(f'markdown_make_main on {PLATFORM}. JAN 04 2021 VERSION ')
+    logger.debug(f'ARGS: {argv}')
+
+    if len(argv) > 3:
+        # logger.info('Called from Python: setting cwd to parent directory')
+        original_cwd = os.getcwd()
+        p = Path(argv[1])
+        os.chdir(p.parent)
 
     if len(argv) == 0:
         argv = sys.argv
 
     # update biblio file if we appear to be processing the book...
     book = pathlib.Path(argv[1])
-    making_book = False
-    if str(book.parent.absolute()).find('spectral_risk_measures_monograph') >= 0 or \
-       str(book.parent.absolute()).find('book-hack') >= 0:
-        making_book = True
+    if str(book.parent.resolve()).find('spectral_risk_measures_monograph') >= 0 or \
+       str(book.parent.resolve()).find('book-hack') >= 0:
         update_book_bibfile()
 
     # fix the date
@@ -212,19 +216,23 @@ def markdown_make_main(*argv):
     # print(debug_mode)
     dp(f'ready to execute\n{debug_mode}\n{ydic}\n{args}')
 
-    if making_book:
-        # create a batch file of the build, often handy to have
-        with open('make_last.bat', 'w', encoding='utf-8') as f:
-            f.write('REM Last build\n')
-            f.write(f'REM {dt}\n')
-            out = ' '.join(args)
-            f.write(out)
-            f.write(f'\nREM TeX Output: uncomment next line\n')
-            f.write('REM ')
-            if PLATFORM == 'win':
-                f.write(re.sub(r'\\pdf\\(.*)\.pdf', r'\1.tex', out))
-            else:
-                f.write(re.sub(r'/pdf/(.*)\.pdf', r'\1.tex', out))
+    # if called from Python
+    if len(argv) > 3:
+        os.chdir(original_cwd)
+        return nfn
+
+    # create a batch file of the build, often handy to have
+    with open('make_last.bat', 'w', encoding='utf-8') as f:
+        f.write('REM Last build\n')
+        f.write(f'REM {dt}\n')
+        f.write(f'\nREM PDF Output: uncomment next line\n')
+        out = ' '.join(args)
+        f.write(f'REM {out}\n')
+        f.write(f'\nREM TeX Output\n')
+        if PLATFORM == 'win':
+            f.write(re.sub(r'\\pdf\\(.*)\.pdf', r'\\\1.tex', out))
+        else:
+            f.write(re.sub(r'/pdf/(.*)\.pdf', r'/\1.tex', out))
 
     if debug_mode not in ('quick', 'maketexformat', 'format', 'makeformat', 'maketemplate'):
         print('EXECUTING MARKDOWN BUILD\n\n{:}\n'.format(' '.join(args)))
@@ -601,22 +609,29 @@ def update_book_bibfile():
     shutil.copy(p_from, p_to)
 
 
-def md_summary(filename_regex, out_name='summary', dir_path='.'):
+def md_summary(filename_regex, out_name='', dir_path='.'):
     """
     Summarize Markdown files in dir_name matching filename_regex to md and html files
 
     Stephen J. Mildenhall (c) 2017-2021
 
-    see the end of file for some helpful pointer on using the re.match clss
+    see the end of file for some helpful pointer on using the re.match
+
+    if out_name = '' returns a string
+
+
     """
 
     if not isinstance(dir_path, Path):
         dir_path = Path(dir_path)
 
-    out_file_md =  dir_path / f'{out_name}.md'
-    out_file_html =  dir_path / f'{out_name}.html'
-    fo = out_file_md.open('w', encoding='utf-8')
-    print(out_file_md.resolve())
+    if out_name == '':
+        fo = StringIO()
+    else:
+        out_file_md = dir_path / f'{out_name}.md'
+        fo = out_file_md.open('w', encoding='utf-8')
+        print(out_file_md.resolve())
+
     regexp = re.compile("^(#[#]*) (.*)$|^(```)")
     tab = '\t'
 
@@ -660,15 +675,19 @@ def md_summary(filename_regex, out_name='summary', dir_path='.'):
                         ## in out code block
                         in_code_block = not in_code_block
 
-    fo.close()
-    # process output to HTML
-    # args = ( f"/home/steve/anaconda3/bin/pandoc --standalone --metadata title:'{out_name}' "
-    #     "-V author:'Stephen J. Mildenhall' "
-    #     "-f markdown+smart -t html --css=../css/github.css "
-    #     f"-o  {out_file_md.resolve()} {out_file_md.resolve()}")
-    # print(args)
-    # subprocess.Popen(args)
-    return out_file_md
+    if out_name == '':
+        return fo.getvalue()
+    else:
+        fo.close()
+        # process output to HTML
+        # out_file_html = dir_path / f'{out_name}.html'
+        # args = ( f"/home/steve/anaconda3/bin/pandoc --standalone --metadata title:'{out_name}' "
+        #     "-V author:'Stephen J. Mildenhall' "
+        #     "-f markdown+smart -t html --css=../css/github.css "
+        #     f"-o  {out_file_md.resolve()} {out_file_md.resolve()}")
+        # print(args)
+        # subprocess.Popen(args)
+        return out_file_md
 
 if __name__ == '__main__':
     markdown_make_main()
