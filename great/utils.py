@@ -63,7 +63,7 @@ def checksum(ob):
     return hasher.hexdigest()
 
 
-def test_df(nrows=10, ncols=3, multi_index=False):
+def test_df(nrows=10, ncols=3, multi_index=False, hack=False):
     """
     make a dummy test dataframe
 
@@ -79,8 +79,21 @@ def test_df(nrows=10, ncols=3, multi_index=False):
         df.iloc[:, -1] = np.random.choice(colnames, nrows)
         df = df.set_index(list(df.columns[-2:]))
         df.index.names = ['l1_name', 'l2_name']
-    return df
+    if not hack:
+        return df
 
+    n = len(df)
+    df.loc[n+1] = (['One', 'One', 'One', 'More QplP add others']*10)[:ncols]
+    df.loc[n+2] = (['Two', 'Two', 'Three', 'Four pL']*10)[:ncols]
+    df.loc[n+3] = colnames[:ncols]
+    df = df.T
+    df = df.set_index([n+1, n+2, n+3])
+    df = df.T
+    df.columns.names = ['Level 1', 'Lp 2', 'lv 3']
+    df['G'] =  [f'hello {i // 3}' for i in range(len(df))]
+    df['H'] =  [f'beppi {i}' for i in range(len(df))]
+    df = df.set_index(['G', 'H'])
+    return df
 
 def float_to_binary(num):
     """
@@ -487,6 +500,7 @@ class GreatMagics(Magics):
     @cell_magic
     @magic_arguments()
     @argument('-o', '--output', help='Output variable name ')
+    @argument('-t', '--tab', action='store_true', help='tab separated ')
     def smcsv(self, line, cell):
         """
         Parse csv stream into DataFrame
@@ -498,12 +512,13 @@ class GreatMagics(Magics):
         """
         args = parse_argstring(self.smcsv, line)
         sio = StringIO(cell)
-        df = pd.read_csv(sio)
+        sep = ('\t' if args.tab else ',')
+        df = pd.read_csv(sio, sep)
         if args.output is None:
             return df
         else:
             self.shell.user_ns[args.output] = df
-            return f'{len(df)} rows stored in variablce {args.output}'
+            return f'{len(df)} rows stored in variable {args.output}'
 
     @line_magic
     def sdir(self, line=''):
