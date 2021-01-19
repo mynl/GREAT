@@ -500,190 +500,6 @@ class PresentationManager(object):
         if self.tacit_override or not tacit:
             display(Markdown(text_out))
 
-    # def table(self, df, label, *, caption="", buf='body', float_format=None, fill_nan='', font_size=0.0,
-    #           sparsify=False, force_float=False, multipart=0, new_slide=True, tacit=False, promise=False, **kwargs):
-    #     r"""
-    #
-    #     fontsize tiny scriptsize or 0.15 or nothing etc.
-    #     multipart => need parts to have different file names, appended for >0 parth
-    #
-    #     Add a tablea
-    #     label used as file name
-    #     stuff table in clipboard latex table, save to file...add caption, labels etc.
-    #     rational formatting
-    #
-    #     force_float = convert input to float first (makes a copy) for col alignment
-    #
-    #         def sticb(self, df, float_format=None, fill_nan='', caption='caption', label='label', file_name='',
-    #               here='', font_size=False, sideways=False, sparsify=False, **kwargs):
-    #
-    #     args passed to pandas to_latex
-    #     From CEA project and Monograph SRM_Examples
-    #
-    #     output_style
-    #         with_table : all output in @@@ file and include in main md file; use when caption is generic
-    #         caption:   puts caption text in the main markdown file, use when caption will be edited
-    #         inline: all output in md file directly (not recommended)
-    #
-    #     font_size = scriptsize, footnotesize etc.
-    #
-    #     label and columns have _ escaped for TeX but the caption is not - so beware!
-    #
-    #     multipart=True for widetable, then skip the beamer caption
-    #
-    #     Test Cases
-    #     ==========
-    #
-    #         import great as grt
-    #         from great.doc_maker import DocMaker
-    #         df = grt.test_df()
-    #
-    #         DM = doc.DocMaker(f'notes\\vig-n-tester-example.md',
-    #                           key=f'vig-n',
-    #                           title='All Different Table Options',
-    #                           tidy=True)
-    #
-    #         DM.text('Writing test examples of all combinations to file. ')
-    #         j = 0
-    #         sideways = False
-    #         for fs in ['normalsize', 'footnotesize', 'scriptsize', 'tiny']:
-    #                 for output_style in ['with_table', 'inline', 'caption']:
-    #                     j += 1
-    #                     DM.table(df, f'test-{j}',
-    #                              f'Caption 1 with settings font-size={fs}, sideways={sideways}, output-style={output_style.replace("_", "-")}',
-    #                              font_size=fs, sideways=sideways, output_style=output_style)
-    #
-    #         sideways = True
-    #         df = grt.test_df(ncols=20)
-    #
-    #         # reveals there is  no tiny!
-    #         for fs in ['normalsize', 'footnotesize', 'scriptsize', 'tiny']:
-    #             j += 1
-    #             DM.table(df, f'test-{j}',
-    #                      f'Caption 1 with settings font-size={fs}, sideways={sideways}',
-    #                      font_size=fs, sideways=sideways)
-    #
-    #
-    #         DM.process()
-    #
-    #     Parameters
-    #     ==========
-    #
-    #     :param promise:
-    #     :param new_slide:
-    #     :param buf:
-    #     :param tacit:
-    #     :param multipart:
-    #     :param df:
-    #     :param label:
-    #     :param caption:
-    #     :param float_format:
-    #     :param fill_nan:
-    #     :param here:
-    #     :param font_size:
-    #     :param custom_font_size:  e.g.  input the size 0.15, second size will
-    #         be scaled up appropriately. Overrides font_size. \fontsize{0.15cm}{0.170cm}\selectfont
-    #     :param sideways:
-    #     :param sparsify:
-    #     :param force_float:
-    #     :param output_style:
-    #     Can be None (default) or first, mid, last.
-    #     :param kwargs:
-    #     :return:
-    #
-    #     """
-    #
-    #     assert not promise or self.output_style == 'with_table'
-    #
-    #     if not self.active:
-    #         if not tacit:
-    #             display(df)
-    #         return
-    #
-    #     if float_format is None:
-    #         float_format = self.default_float_fmt
-    #
-    #     df = df.copy()
-    #     if force_float:
-    #         df = df.astype(float, errors='ignore')
-    #
-    #     # have to handle column names that may include _
-    #     # For now assume there are not TeX names
-    #     slide_caption = self.make_title(label)
-    #     label = self.make_safe_label(label)
-    #     label = self.clean_name(label)
-    #
-    #     # check the caption, that can contain tex
-    #     if not self.clean_underscores(caption):
-    #         logger.warning('Caption contains unescaped underscores _. You must ensure they are in dollars.')
-    #
-    #     df = self.clean_index(df)
-    #
-    #     s = df.to_latex(float_format=float_format, sparsify=sparsify, escape=False, **kwargs)
-    #     s = s.replace('nan', fill_nan)
-    #
-    #     if type(font_size) in [int, float, np.int, np.float]:
-    #         if font_size:
-    #             font_size = f'\\fontsize{{{font_size}cm}}{{{font_size}cm}}\\selectfont\n'
-    #             ends_font_size = '\\normalsize\n'
-    #         else:
-    #             font_size = f'\\fontsize{{{self.default_table_font_size}cm}}{{{self.default_table_font_size}cm}}\\selectfont\n'
-    #             ends_font_size = '\\normalsize\n'
-    #     elif font_size != '':
-    #         font_size = f'\\{font_size}\n'
-    #         ends_font_size = '\\normalsize\n'
-    #     else:
-    #         ends_font_size = ''
-    #
-    #     s_md_pre = f'\n\\begin{{table}}\n{font_size} %\n'
-    #     if caption != '':
-    #         s_md_pre += f'\\caption{{{caption}}}\n'
-    #     if label != '':
-    #         s_md_pre += f'\\label{{tab:{label}}}\n'
-    #
-    #     s_table = f'\\medskip\n\\centering\n{s}'
-    #     s_md_post = f'{ends_font_size}\\end{{table}}\n\n'
-    #
-    #     suffix = f'-{multipart}' if multipart else ''
-    #     table_file = self.table_dir / f'{self.key}-{label}{suffix}.md'
-    #     table_file_local = f'table/{self.key}-{label}{suffix}.md'
-    #
-    #     if new_slide and not promise:
-    #         self._write_buffer_(buf, f'## {slide_caption}\n\n')
-    #         if not tacit:
-    #             display(Markdown(f'## {slide_caption}'))
-    #
-    #     if self.output_style == 'caption':
-    #         with table_file.open('w', encoding='utf-8') as f:
-    #             self._write_buffer_(buf, '\n')
-    #             self._write_buffer_(buf, s_table)
-    #         self._write_buffer_(buf, s_md_pre)
-    #         self._write_buffer_(buf, f'\n@@@include {table_file_local}\n\n')
-    #         self._write_buffer_(buf, s_md_post)
-    #
-    #     elif (self.output_style == 'inline') or (self.output_style == 'in-line'):
-    #         self._write_buffer_(buf, s_md_pre)
-    #         self._write_buffer_(buf, s_table)
-    #         self._write_buffer_(buf, s_md_post)
-    #
-    #     elif self.output_style == 'with_table':
-    #         with table_file.open('w', encoding='utf-8') as f:
-    #             f.write(s_md_pre)
-    #             f.write(s_table)
-    #             f.write(s_md_post)
-    #         if promise:
-    #             return f'@@@include {table_file_local}\n\n'
-    #         else:
-    #             self._write_buffer_(buf, f'@@@include {table_file_local}\n\n')
-    #
-    #     else:
-    #         raise ValueError(f'Unknown option {self.output_style} for output_style passed to table.')
-    #
-    #     if self.tacit_override or not tacit:
-    #         display(df.style.format(float_format))
-    #         if caption != '':
-    #             display(Markdown(caption))
-
     def save(self, dir, filestem, body):
         """
         just save body (list of strings) to filename
@@ -1674,7 +1490,6 @@ class PresentationManagerMagic(Magics):
     @line_cell_magic
     @magic_arguments('%pmt')
     @argument('-a', '--appendix', action='store_true', help='Mark as appendix material.')
-    @argument('-e', '--engine', type=str, default='tikz', help='Use ENGINE to covert to md: latex or tikz (default')
     @argument('-f', '--fstring', action='store_true', help='Convert caption into f string and evaluate.')
     @argument('-h', '--hrule', type=str, default=None, help='Horizontal rule locations eg 1,3,-1')
     @argument('-i', '--ignore', action='store_true', help='Ignore the cell, turns into a comment')
@@ -1734,52 +1549,29 @@ class PresentationManagerMagic(Magics):
             else:
                 caption = ""
             logger.info(caption)
-            #
-            # Engine specific
-            if args.engine == 'latex':
-                if args.wide:
-                    # wide tables don't have captions.
-                    s = f'promise = PM.wide_table({df}, "{label}", buf="{buf}", ' \
-                            f'new_slide={args.new_slide}, nparts={args.wide}, '  \
-                            f'tacit={args.tacit}, promise={args.promise}'
-                else:
-                    s = f'promise = PM.table({df}, "{label}", buf="{buf}", caption="""{caption}""", ' \
-                            f'new_slide={args.new_slide}, ' \
-                            f'tacit={args.tacit}, promise={args.promise}'
-                if args.fontsize != '':
-                    if np.all([i in '0123456789.' for i in args.fontsize]):
-                        s += f', fontsize={args.fontsize}'
-                    else:
-                        s += f', fontsize="{args.font_size}"'
-                if args.format:
-                    s += f''', float_format={ff}'''
-                s += ')'
-            elif args.engine == 'tikz':
-                hrule = args.hrule
-                vrule = args.vrule
-                if hrule:
-                    hrule = [int(i) for i in hrule.split(',') if i.isnumeric()]
-                if vrule:
-                    vrule = [int(i) for i in vrule.split(',') if i.isnumeric()]
-                try:
-                    scale = float(args.scale)
-                except ValueError:
-                    logger.info(f'Error converting args.scale {args.scale} to float; valid options')
-                    scale = 0.5
-                if args.underscore:
-                    s = f'promise = PM.tikz_table(grt.de_underscore({df}), '
-                else:
-                    s = f'promise = PM.tikz_table({df}, '
-                s += f'"{label}", buf="{buf}", caption="""{caption}""", '\
-                     f'new_slide={args.new_slide}, ' \
-                     f'tacit={args.tacit}, promise={args.promise}, ' \
-                     f'hrule={hrule}, vrule={vrule}, scale={scale}, ' \
-                     'sparsify=1, figure="table" '
-                if args.format:
-                    s += f''', float_format={ff}'''
-                s += ')'
+            hrule = args.hrule
+            vrule = args.vrule
+            if hrule:
+                hrule = [int(i) for i in hrule.split(',') if i.isnumeric()]
+            if vrule:
+                vrule = [int(i) for i in vrule.split(',') if i.isnumeric()]
+            try:
+                scale = float(args.scale)
+            except ValueError:
+                logger.info(f'Error converting args.scale {args.scale} to float; valid options')
+                scale = 0.5
+            if args.underscore:
+                s = f'promise = PM.tikz_table(grt.de_underscore({df}), '
             else:
-                raise ValueError(f'Inadmissible enging {args.engine}: options tikz or latex')
+                s = f'promise = PM.tikz_table({df}, '
+            s += f'"{label}", buf="{buf}", caption="""{caption}""", '\
+                 f'new_slide={args.new_slide}, ' \
+                 f'tacit={args.tacit}, promise={args.promise}, ' \
+                 f'hrule={hrule}, vrule={vrule}, scale={scale}, ' \
+                 'sparsify=1, figure="table" '
+            if args.format:
+                s += f''', float_format={ff}'''
+            s += ')'
         else:
             # called as line magic: [table] @ label or just label, uses bit
             if line.find('@') >= 0:
@@ -1814,7 +1606,6 @@ class PresentationManagerMagic(Magics):
             else:
                 logger.info('Missing variables..recomputing cell.')
                 self.shell.ex(cell)
-
 
 
 def _sparsify(col):
@@ -1861,8 +1652,6 @@ def df_to_tikz(df, *, fn_out=None, float_format=None, tabs=None,
                vrule=None, post_process='', label='', caption='',
                sparsify=1, clean_index=False):
     """
-    TODO: put in auto vertical rules when there is a multi index...! and sparsify the multi index...
-
     Write DataFrame to custom tikz matrix to allow greater control of
     formatting and insertion of horizontal divider lines
 
@@ -2012,7 +1801,7 @@ def df_to_tikz(df, *, fn_out=None, float_format=None, tabs=None,
     matrix_name = hex(abs(hash(str(df))))
 
     # note this happens AFTER you have reset the index...need to pass number of index columns
-    colw, mxmn, tabs = guess_column_widths(df, nc_index=nc_index, float_format=wfloat_format, tabs=tabs)
+    colw, mxmn, tabs = guess_column_widths(df, nc_index=nc_index, float_format=wfloat_format, tabs=tabs, scale=scale)
     # print(colw, tabs)
     logger.debug(f'tabs: {tabs}')
 
@@ -2155,15 +1944,29 @@ def df_to_tikz(df, *, fn_out=None, float_format=None, tabs=None,
                       f'{matrix_name}-{ln}-{nc_index+1}.south west)  -- '
                       f'([yshift={-yshift}em]{matrix_name}-{ln}-{nc+1}.south east);\n')
 
+    written = set(range(1, nc_index+1))
+    if vrule:
+        # to left of col, 1 based, includes index
+        # write these first
+        # TODO fix madness vrule is to the left, mi_vrules are to the right...
+        ls = 'very thin'
+        for cn in vrule:
+            if cn not in written:
+                sio.write(f'\\path[draw, {ls}] ([xshift={xshift}em]{matrix_name}-1-{cn}.south west)  -- '
+                      f'([yshift={-descender_proportion-yshift}em, xshift={xshift}em]{matrix_name}-{nr}-{cn}.base west);\n')
+                written.add(cn-1)
+
     if len(mi_vrules) > 0:
-        print(mi_vrules )
+        logger.info(f'Generated vlines {mi_vrules}; already written {written}')
         # vertical rules for the multi index
         # these go to the RIGHT of the relevant column and reflect the index columns already
         # mi_vrules = {level of index: [list of vrule columns]
         # written keeps track of which vrules have been done already; start by cutting out the index columns
-        written = set(range(1, nc_index+1))
         ls = 'ultra thin'
         for k, cols in mi_vrules.items():
+            # don't write the lowest level
+            if k == len(mi_vrules) - 1:
+                break
             for cn in cols:
                 if cn in written:
                     pass
@@ -2176,13 +1979,6 @@ def df_to_tikz(df, *, fn_out=None, float_format=None, tabs=None,
                     else:
                         sio.write(f'\\path[draw, {ls}] ([xshift={-xshift}em, yshift={-yshift}em]{matrix_name}-{top}-{cn}.south east)  -- '
                           f'([yshift={-descender_proportion-yshift}em, xshift={-xshift}em]{matrix_name}-{nr}-{cn}.base east);\n')
-
-    if vrule:
-        # to left of col, 1 based, includes index
-        ls = 'very thin'
-        for cn in vrule:
-            sio.write(f'\\path[draw, {ls}] ([xshift={xshift}em]{matrix_name}-1-{cn}.south west)  -- '
-                      f'([yshift={-descender_proportion-yshift}em, xshift={xshift}em]{matrix_name}-{nr}-{cn}.base west);\n')
 
     if label == '':
         lt = ''
@@ -2215,7 +2011,7 @@ def df_to_tikz(df, *, fn_out=None, float_format=None, tabs=None,
     return sio.getvalue()
 
 
-def guess_column_widths(df, nc_index, float_format, tabs=None):
+def guess_column_widths(df, nc_index, float_format, tabs=None, scale=1):
     """
     estimate sensible column widths for the dataframe [in what units?]
 
@@ -2295,6 +2091,15 @@ def guess_column_widths(df, nc_index, float_format, tabs=None):
                 # data all seems about the same width
                 _tabs.append(common_size)
         logger.info(f'Determined tab spacing: {_tabs}')
+        # look to rescale, shoot for width of 150 on 100 scale basis
+        data_width = sum(_tabs[nl:])
+        index_width = sum(_tabs[:nl])
+        target_width = 150 * scale - index_width
+        if data_width / target_width < 0.9:
+            # don't rescale above 1:1 - don't want too large
+            rescale = min(1/scale, target_width / data_width)
+            _tabs = [w if i < nl else w * rescale for i, w in enumerate(_tabs)]
+            logger.info(f'Rescale {rescale} applied; tabs = {_tabs}')
         tabs = _tabs
 
     return colw, mxmn, tabs
@@ -2350,6 +2155,7 @@ def de_underscore(df, which='b'):
     df.index.names = [de_(i) for i in idx_names]
     df.columns.names = [de_(i) for i in col_names]
     return df
+
 
 def int_to_roman(num):
     val = [
