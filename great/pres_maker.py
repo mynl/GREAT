@@ -58,6 +58,8 @@ from titlecase import titlecase
 import pypandoc
 from pprint import PrettyPrinter
 import datetime
+import base64
+import hashlib
 
 # import sys
 # import re
@@ -178,6 +180,7 @@ class PresentationManager(object):
         self.config_all = json.load(Path(config_file).open('r', encoding='utf-8'))
         self.config_file = config_file
         self.builds_id = None
+        self.temp_file = None
 
     def activate_build(self, builds_id):
         """
@@ -230,6 +233,26 @@ class PresentationManager(object):
         for k, v in self.config_all['tops'].items():
             s += f'| `{v["top_value"]}` | {k} | {v["subtitle"]} | {v["file"]}|\n'
         return Markdown(s)
+
+    def temp_write(self, *lines):
+        """
+        write to temporory file
+
+        :param argv:
+        :return:
+        """
+        if self.temp_file is None:
+            f = (self.base_dir / "dm_temp_file.md")
+            if f.exists():
+                f.unlink()
+            self.temp_file = f.open('a', encoding='UTF-8')
+        lines = [l.replace('\\\\', '\\') for l in lines]
+        self.temp_file.writelines(lines)
+
+    def temp_close(self):
+        if self.temp_file is not None:
+            self.temp_file.close()
+        self.temp_file = None
 
     def pretty(self, kind='all'):
         """
@@ -411,7 +434,7 @@ class PresentationManager(object):
                 # title case ## headings too
                 m2 = re.findall('^## (.*)', ln)
                 if m2:
-                    stxt[i] = '##  ' + titlecase(ln[3:])
+                    stxt[i] = '\n##  ' + titlecase(ln[3:])
 
         txt = '\n'.join(stxt) + '\n\n'
         self._write_buffer_(buf, txt)
@@ -484,7 +507,7 @@ class PresentationManager(object):
         fig_text += '\n\n'
         if new_slide and not promise:
             # need to write in one row so that debug mode write correctly to dm.md
-            text_out = f'## {slide_caption}\n\n{fig_text}'
+            text_out = f'\n## {slide_caption}\n\n{fig_text}'
         elif not promise:
             # not new slide, not promise
             text_out = fig_text
@@ -502,7 +525,7 @@ class PresentationManager(object):
 
     def save(self, dir, filestem, body):
         """
-        just save body (list of strings) to filename
+        just save body string to filename
         return the relevant include file
 
         :param self:
@@ -519,50 +542,12 @@ class PresentationManager(object):
 
         return f'@@@include {filename}'
 
-    def wide_table(self, df, label, *, buf='body', nparts=2,
-                   float_format=None, fill_nan='', font_size=0.0,
-                   sparsify=False, force_float=False, new_slide=True, new_slide_each_part=False,
-                   tacit=False, promise=False, **kwargs):
-        """
-
-        nparts = split the table into nparts,
-        new_slide for each part
-
-        Splits df and passes to table to do the work.
-
-        Large Tables
-        ============
-
-        Makes some attempt to split up very wide tables
-        You handle long tables yourself.
-
-        ```
-
-        :return:
-
-        """
-
-        cols = df.shape[1]
-        cols_per_part = cols // nparts
-        if nparts * cols_per_part < cols:
-            cols_per_part += 1
-
-        ans = []
-        for i, b in enumerate(range(0, cols, cols_per_part)):
-            bit = df.iloc[:, b:b + cols_per_part]
-            #  no captions for wide tables
-            ans.append(self.table(bit, label, caption='', buf=buf, float_format=float_format, fill_nan=fill_nan,
-                       font_size=font_size, sparsify=sparsify, force_float=force_float, multipart=i,
-                       new_slide=(new_slide_each_part if i else new_slide), tacit=tacit, promise=promise, **kwargs))
-
-        if promise:
-            return '\n'.join(ans)
-
     def tikz_table(self, df, label, *, caption="", buf='body',
                    new_slide=True, tacit=False, promise=False,
                    float_format=None, tabs=None,
                    show_index=True, scale=0.717,
                    figure='figure', hrule=None,
+                   equal=False,
                    vrule=None, sparsify=1):
         """
 
@@ -611,7 +596,7 @@ class PresentationManager(object):
         # do the work
         s_table = df_to_tikz(df, label=label, caption=caption,
                              float_format=float_format, tabs=tabs,
-                             show_index=show_index, scale=scale,
+                             show_index=show_index, scale=scale, equal=equal,
                              figure=figure, hrule=hrule, vrule=vrule, sparsify=sparsify, clean_index=True)
 
         # added a local bufer so output works better with debug model: need a single call to ._write_buffer_
@@ -622,7 +607,7 @@ class PresentationManager(object):
         table_file_local = f'table/{table_file.name}'
 
         if new_slide and not promise:
-            sio_temp.write(f'## {slide_caption}\n\n')
+            sio_temp.write(f'\n## {slide_caption}\n\n')
             # self._write_buffer_(buf, f'## {slide_caption}\n\n')
             if not tacit:
                 display(Markdown(f'## {slide_caption}'))
@@ -732,6 +717,8 @@ class PresentationManager(object):
         :param text:
         :return:
         """
+        # sublime text-esque removal of white space
+        text = re.sub('\s+$', '\n', text, flags=re.MULTILINE)
         # find the sections and add labels
         sections = re.findall('^(## .+)', text, re.MULTILINE)
         for slide_heading in sections:
@@ -1028,74 +1015,6 @@ class PresentationManager(object):
                 idx = idx.set_levels(repl, level=i)
         return idx
 
-#     def format_source(self, md_file, to='html', title=''):
-#         """
-#         Print out the source file to md_file and Pandoc if installed
-#
-#         md_file is the name of the md (JupyText linked!) that creates the presentation.
-#
-#         MUST use md linking through JupyText
-#
-#         :param to: output format: html or pdf
-#         :param md_file:
-#         :return:
-#         """
-#
-#         header = """---
-# title: Source Code
-# author: Stephen J. Mildenhall
-# date: created
-# geometry: hmargin=1in, vmargin=.75in
-# fontsize: 9pt
-# classoption: a4paper, landscape
-# header-includes: \\input{{/s/telos/common/general.tex}}
-# cla: --standalone
-# cla: -f markdown+smart+yaml_metadata_block+citations
-# cla: --pdf-engine=xelatex
-# cla: -o pdf
-# cla: --filter pandoc-citeproc
-# cla: -t latex
-# cla: --template=/S/TELOS/Common/sjm-doc-template.tex
-# debug: true
-# ---
-#
-# """
-#         if isinstance(md_file, Path):
-#             p = md_file
-#         else:
-#             p = Path(md_file)
-#         # only working with markdown files
-#         if p.suffix != '.md':
-#             raise ValueError('format_source only works with markdown .md files')
-#
-#         if to == 'html':
-#             CREATE_NO_WINDOW = 0x08000000
-#             source_output_file = self.base_dir / f'{self.key}-source.html'
-#             logger.info(f'Making {source_output_file}')
-#             css = filename('S/TELOS/PIRC/css/github.css')
-#             if title == "":
-#                 title = p.stem
-#             command = f'pandoc -f markdown -t html -o {source_output_file.resolve()} -s ' \
-#                         f'--metadata title="{title}" '  \
-#                         f'--css={css} {p.resolve()}'
-#             logger.info(f'Executing: {command}')
-#             if platform()[:5] == 'Linux':
-#                 p = subprocess.Popen(command, stdout=subprocess.PIPE)
-#             else:
-#                 p = subprocess.Popen(command, creationflags=CREATE_NO_WINDOW, stdout=subprocess.PIPE)
-#             p.communicate()
-#
-#         elif to == 'pdf':
-#             with p.open('r', encoding='utf-8') as f:
-#                 txt = f.read()
-#             source_output_file = self.base_dir / f'{self.key}-source.md'
-#             with source_output_file.open('w', encoding='utf-8') as f:
-#                 f.write(header + txt)
-#             self.make_beamer(source_output_file)
-#         else:
-#
-#             raise ValueError(f'Unknown option to = {to}; pdf and html are valid options.')
-
     def make_beamer(self, path_file):
         """
         make path_file = Path file object if possible
@@ -1149,7 +1068,6 @@ class PresentationManager(object):
         # short = short summary that goes to website
         sio = StringIO()
         short = StringIO()
-
         # start by pretty printing the config file
         sio.write(f'# **{self.title}** Configuration File\n')
 
@@ -1308,6 +1226,234 @@ class PresentationManager(object):
         with out.open('w', encoding='utf-8') as f:
             f.write(sio.getvalue())
 
+    @staticmethod
+    def short_hash(x, n=10):
+        hasher = hashlib.sha1(x.encode('utf-8'))
+        return base64.b32encode(hasher.digest())[:n].decode()
+
+    def combine(self):
+        """
+        break pages of all files in PM into tops, sections and slides
+        return as nice DataFrame
+
+        self = PM object
+
+        """
+
+        # keep track of subtitles and section numbering
+        dir_path = self.base_dir
+        tops = self.config_all['tops']
+
+        regexp = re.compile(r'^(# .*)$|^(## .*)$|^(---)$', flags=re.MULTILINE)
+        # three groups here, plus what is between the dividers
+        ngroups = 4
+        dfs = []
+        for v in tops.values():
+            k = v['top_value']
+            f = dir_path / f"pirc-{k}.md"
+            logger.debug(f.name)
+
+            if f.exists():
+                # fourth argument returns before doing any real work
+                logger.debug(f'processing {f}')
+                resolved_f = markdown_make_main('', str(f), f.stem, None)
+                # this is a TMP file
+                logger.debug(resolved_f)
+                resolved_f = Path(resolved_f)
+                with resolved_f.open('r', encoding='utf-8') as fh:
+                    txt = fh.read()
+                    stxt = regexp.split(txt)
+                    split = [stxt[1:][j * ngroups:j * ngroups + ngroups]
+                             for j in range((len(stxt) - 1) // ngroups)]
+                    if split[0][2] == '---':
+                        split = split[2:]
+                    # set the index to correspond to page numbers in the PDF (actual pages, not on-slide pages; no pauses)
+                    df = pd.DataFrame(split,
+                                      columns=['section', 'slide', 'dash', 'txt'],
+                                      index=range(2, len(split) + 2))
+                    dfs.append(df)
+                # be tidy
+                resolved_f.unlink()
+            else:
+                df = pd.DataFrame(columns=['section', 'slide', 'dash', 'txt'])
+                df.loc[2] = ['# Table of Contents', None, None, f'Top {k} Coming Soon']
+                dfs.append(df)
+
+        dfall = pd.concat(dfs, keys=[i['top_value'] for i in self.config_all['tops'].values()], names=['top', 'idx'])
+        dfall['ref'] = dfall.apply(lambda x: x.iloc[:-1].str.cat(), axis=1)
+        dfall['content'] = dfall.apply(lambda x: x.iloc[:-1].str.cat(), axis=1)
+        dfall['length'] = [len(i) for i in dfall.content]
+        dfall[['kind', 'title']] = dfall.ref.str.extract('(##*) (.*)')
+        dfall = dfall[['kind', 'title', 'content', 'length']].copy()
+        dfall['hash'] = [self.short_hash(i, 4) for i in dfall.content]
+        for k, v in tops.items():
+            dfall.loc[(v['top_value'], 1), :] = ['.', v['subtitle'], '', 0, v['top_value']*4]
+        dfall = dfall.sort_index()
+        dfall['title'] = [self.remove_label(i) for i in dfall['title']]
+        return dfall
+
+    @staticmethod
+    def generic_combine(dir_path, pattern, columns, hash_length=50):
+        """
+        generic version of combine that will apply to anything (e.g., the book!)
+
+        for PIRC
+        columns = ['section', 'slide', 'dash', 'txt']
+
+        for the book
+        columns = ['chapter', 'section', 'subsection', 'dash', 'txt']
+
+        :param dir_path:  where the files live
+        :param pattern: glob pattern for files to combine
+        :return:
+        """
+
+        # keep track of subtitles and section numbering
+        # going to assume there are no comments in code...
+
+        cwd = os.getcwd()
+        os.chdir(dir_path)
+
+        s = ''
+        for i, t in enumerate(columns[:-2]):
+            s += f'^({"#" * (i+1)} .*)$|'
+        s +=  "^(---)$"
+        logger.info(f'Using regex pattern {s}')
+        regexp = re.compile(s, flags=re.MULTILINE)
+        ngroups = len(columns)
+        dfs = []
+        fs = []
+
+        for f in dir_path.glob(pattern):
+            # fourth argument returns before doing any real work
+            logger.info(f'processing {f}')
+            fs.append(f.stem)
+            resolved_f = markdown_make_main('', str(f), f.stem, None)
+            # this is a TMP file
+            logger.info(resolved_f)
+            resolved_f = Path(resolved_f)
+            with resolved_f.open('r', encoding='utf-8') as fh:
+                txt = fh.read()
+                stxt = regexp.split(txt)
+                split = [stxt[1:][j * ngroups:j * ngroups + ngroups]
+                         for j in range((len(stxt) - 1) // ngroups)]
+                if split[0][2] == '---':
+                    split = split[2:]
+                # set the index to correspond to page numbers in the PDF (actual pages, not on-slide pages; no pauses)
+                df = pd.DataFrame(split,
+                                  columns=columns,
+                                  index=range(2, len(split) + 2))
+                dfs.append(df)
+            # be tidy
+            resolved_f.unlink()
+
+        dfall = pd.concat(dfs, keys=fs, names=['top', 'idx'])
+        dfall['ref'] = dfall.apply(lambda x: x.iloc[:-1].str.cat(), axis=1)
+        dfall['content'] = dfall.apply(lambda x: x.iloc[:-1].str.cat(), axis=1)
+        dfall['length'] = [len(i) for i in dfall.content]
+        dfall[['kind', 'title']] = dfall.ref.str.extract('(##*) (.*)')
+        dfall = dfall[['kind', 'title', 'content', 'length']].copy()
+        dfall['hash'] = [PresentationManager.short_hash(i, hash_length) for i in dfall.content]
+        dfall['ititle'] = [ '\t' * len(i) + j for (i, j) in dfall[['kind', 'titles']].iterrows()]
+        # for k, v in tops.items():
+        #     dfall.loc[(v['top_value'], 1), :] = ['.', v['subtitle'], '', 0, v['top_value']*4]
+        dfall = dfall.sort_index()
+        dfall['title'] = [PresentationManager.remove_label(i) for i in dfall['title']]
+
+        os.chdir(cwd)
+
+        return dfall
+
+    @staticmethod
+    def remove_label(s):
+        try:
+            return re.sub(r'\\label{[^}]*}$', '', s)
+        except:
+            return s
+
+    def make_accordion(self, df):
+        """
+        code for website
+        """
+
+        sio = StringIO()
+
+        sio.write('''
+    <div id="accordion-toc">
+        <form action='/'>''')
+
+        for top, g in df.groupby('top'):
+            if len(g) > 1:
+                top_contents = g.apply(lambda x: f'''
+                    <div class="form-group form-check">
+                        <label class="form-check-label">
+                            <input class="form-check-input" type="checkbox">{x.title} ({x.hash})</input>
+                        </label>
+                    </div>''' if x.kind == '#' else ( f'''
+                        <div class="form-group form-check"  style="text-indent: 2em">
+                            <label class="form-check-label">
+                                <input class="form-check-input" type="checkbox">[{x.hash}] {self.remove_label(x.title)} </input>
+                            </label>
+                        </div>'''
+                        if x.kind=='##' else ''),
+                    axis=1).str.cat()
+            else:
+                top_contents = '\n                <li> Coming soon. </li>'
+            s = f'''
+            <div class="card">
+                <div class="card-header">
+                  <a class="card-link" data-toggle="collapse" href="#{top}">
+                    {g.title[0]} ({g.hash[0]})
+                  </a>
+                </div>
+                <div id="{top}" class="collapse show" data-parent="#accordion-toc">
+                  <div class="card-body">
+                    <div class="form-group form-check">
+                        <label class="form-check-label">
+                            <input class="form-check-input" type="checkbox">Select All</input>
+                        </label>
+                    </div>{top_contents}
+                  </div>
+                </div>
+            </div>'''
+            sio.write(s)
+
+        sio.write('''
+        </form>
+    </div>
+    ''')
+
+        with (self.base_dir / 'html/pirc-short-contents.html').open('w', encoding='utf-8') as f:
+            f.write(sio.getvalue())
+
+        return sio.getvalue()
+
+    def make_deck(self, df, title, subtitle, handout, filestem, *hash_list):
+        """
+
+        create a doc from a list of slide hashes
+        df = result of running self.combine()
+
+        call either *list_of_hashes or hash1, hash2, ....
+
+        """
+
+        file = self.base_dir / f'{filestem}.md'
+        with file.open('w', encoding='utf-8') as f:
+            yaml = self.config['yaml'].format(
+                title=title,
+                subtitle=subtitle,
+                created=self.date(),
+                font_size=9,
+                pdf_engine=''
+            )
+            yaml = yaml.replace('toc: false', 'toc: true')
+            if not handout:
+                yaml = yaml.replace(',handout', '')
+            f.write(yaml)
+            dfl = df.copy().set_index('hash')
+            f.write(dfl.loc[hash_list, :].content.str.cat())
+
 
 @magics_class
 class PresentationManagerMagic(Magics):
@@ -1342,12 +1488,12 @@ class PresentationManagerMagic(Magics):
                 tacit = False
             else:
                 tacit = True
-            self.shell.ev(f'PM.text("{line}", buf="body", tacit={tacit})')
+            self.shell.ev(f'PM.text("\\n{line}", buf="body", tacit={tacit})')
         else:
             args = parse_argstring(self.pmb, line)
             if args.ignore:
                 return
-            logger.info(args)
+            logger.debug(args)
             buf = 'body'
             if args.appendix:
                 buf = 'appendix'
@@ -1356,7 +1502,7 @@ class PresentationManagerMagic(Magics):
             if args.front:
                 buf = 'front'
             if args.fstring:
-                logger.info('evaluating as f string')
+                logger.debug('evaluating as f string')
                 if args.code:
                     temp = f'f"""\\\\\\\\footnotesize\n\n```python\n{cell}\n```\n\\\\\\\\normalsize"""'
                 else:
@@ -1367,6 +1513,7 @@ class PresentationManagerMagic(Magics):
     @line_cell_magic
     @magic_arguments('%pmf')
     @argument('-a', '--appendix', action='store_true', help='Mark as appendix material.')
+    @argument('-c', '--command', action='store_true', help='Load the underlying command into the current cell')
     @argument('-f', '--fstring', action='store_true', help='Convert caption into f string and evaluate.')
     @argument('-h', '--height', type=float, default=0.0, help='Vertical size, generates height=height clause.')
     @argument('-i', '--ignore', action='store_true', help='Ignore the cell, turns into a comment')
@@ -1396,7 +1543,7 @@ class PresentationManagerMagic(Magics):
             args = parse_argstring(self.pmf, line)
             if args.ignore:
                 return
-            logger.info(args)
+            logger.debug(args)
             buf = 'body'
             if args.appendix: buf = 'appendix'
             if args.summary: buf = 'summary'
@@ -1431,8 +1578,11 @@ class PresentationManagerMagic(Magics):
                 f = 'f'
                 label = line.strip()
             s = f'promise = PM.figure({f}, "{label}", tacit=True, promise=True)'
-        logger.info(s)
-        self.shell.ex(s)
+        logger.debug(s)
+        if args.command:
+            self.load_cell(s, line, cell)
+        else:
+            self.shell.ex(s)
 
     @cell_magic
     @magic_arguments('%pmsave')
@@ -1457,7 +1607,7 @@ class PresentationManagerMagic(Magics):
         if args.ignore:
             return
         # manipulation common to both engines
-        logger.info(args)
+        logger.debug(args)
         stxt = re.sub('\n+', '\n', cell, re.MULTILINE).strip().split('\n')
         assert len(stxt) >= 2
         dir, *filestem = stxt[0].strip().split(' ')
@@ -1473,7 +1623,7 @@ class PresentationManagerMagic(Magics):
         var = args.variable if args.variable != '' else 'promise'
 
         s = f'{var} = PM.save("{dir}", "{filestem}", """{body}""")'
-        logger.info(s[:100])
+        logger.debug(s[:100])
         self.shell.ex(s)
 
             #
@@ -1490,20 +1640,20 @@ class PresentationManagerMagic(Magics):
     @line_cell_magic
     @magic_arguments('%pmt')
     @argument('-a', '--appendix', action='store_true', help='Mark as appendix material.')
+    @argument('-c', '--command', action='store_true', help='Load the underlying command into the current cell')
     @argument('-f', '--fstring', action='store_true', help='Convert caption into f string and evaluate.')
     @argument('-h', '--hrule', type=str, default=None, help='Horizontal rule locations eg 1,3,-1')
     @argument('-i', '--ignore', action='store_true', help='Ignore the cell, turns into a comment')
     @argument('-m', '--summary', action='store_true', help='Mark as summary material (exlusive with appendix).')
     @argument('-n', '--new_slide', action='store_false', help='Set to suppress new slide.')
     @argument('-p', '--promise', action='store_true', help='Promise: write file but append nothing to stream')
+    @argument('-q', '--equal', action='store_true', help='Hint the column widths should be equal')
     @argument('-w', '--wide', type=int, default=0, help='Use wide table mode, WIDE number of columns')
     @argument('-r', '--format', action='store_true', help='Indicates the last line of input is a float_format function')
     @argument('-s', '--scale', type=float, default="M", help='Scale for tikz')
     @argument('-t', '--tacit', action='store_true', help='tacit: suppress output as Markdown.')
     @argument('-u', '--underscore', action='store_true', help='Apply de_underscore prior to formatting.')
     @argument('-v', '--vrule', type=str, default=None, help='Vertical rule locations, to left of col no')
-    @argument('-z', '--fontsize', type=str, default='', help='Fontsize: tiny, scriptsize, footnotesize, or number '
-                                                         '(e.g., 0.15) for custom font size etc.')
     def pmt(self, line, cell=None):
         """
         PresentationManager table utility. Add a new table to the stream, format and save as TeX file.
@@ -1529,7 +1679,7 @@ class PresentationManagerMagic(Magics):
             if args.ignore:
                 return
             # manipulation common to both engines
-            logger.info(args)
+            logger.debug(args)
             buf = 'body'
             if args.appendix: buf = 'appendix'
             if args.summary: buf = 'summary'
@@ -1548,9 +1698,10 @@ class PresentationManagerMagic(Magics):
                     caption = self.shell.ev(temp)
             else:
                 caption = ""
-            logger.info(caption)
+            logger.debug(caption)
             hrule = args.hrule
             vrule = args.vrule
+            equal = args.equal
             if hrule:
                 hrule = [int(i) for i in hrule.split(',') if i.isnumeric()]
             if vrule:
@@ -1564,11 +1715,12 @@ class PresentationManagerMagic(Magics):
                 s = f'promise = PM.tikz_table(grt.de_underscore({df}), '
             else:
                 s = f'promise = PM.tikz_table({df}, '
-            s += f'"{label}", buf="{buf}", caption="""{caption}""", '\
-                 f'new_slide={args.new_slide}, ' \
-                 f'tacit={args.tacit}, promise={args.promise}, ' \
-                 f'hrule={hrule}, vrule={vrule}, scale={scale}, ' \
-                 'sparsify=1, figure="table" '
+            s += (  f'"{label}", buf="{buf}", caption="""{caption}""", '
+                    f'new_slide={args.new_slide}, ' 
+                    f'tacit={args.tacit}, promise={args.promise}, ' 
+                    f'hrule={hrule}, vrule={vrule}, scale={scale}, ' 
+                    f'equal={equal}, '
+                    'sparsify=1, figure="table" ' )
             if args.format:
                 s += f''', float_format={ff}'''
             s += ')'
@@ -1583,8 +1735,27 @@ class PresentationManagerMagic(Magics):
                 label = line.strip()
             s = f'promise = PM.table({df}, "{label}", tacit=True, promise=True)'
 
-        logger.info(s)
-        self.shell.ex(s)
+        logger.debug(f'command:\n\n{s}\n\n')
+        if args.command:
+            self.load_cell(s, line, cell)
+        else:
+            self.shell.ex(s)
+
+    def load_cell(self, s, line, cell):
+        """
+        load s into the cell in a nicely formatted manner
+
+        :param s:
+        :return:
+        """
+        sps = s.split(',')
+        n = sps[0].find('(') + 1
+        cmd = sps[0][:n]
+        space = ' ' * n
+        s = f'{cmd}\n{space} {sps[0][n:]},\n{space}'
+        s += (f',\n{space}').join(sps[1:])
+        contents = f'# %%pmt {line}\n# ' + '\n# '.join(cell.strip().split('\n')) + '\n' + s
+        self.shell.set_next_input(contents, replace=True)
 
     @line_magic
     def pmbuf(self, line=''):
@@ -1648,7 +1819,7 @@ def _sparsify_mi(mi):
 
 def df_to_tikz(df, *, fn_out=None, float_format=None, tabs=None,
                show_index=True, scale=0.717, column_sep=3/8, row_sep=1/8,
-               figure='figure', extra_defs='', hrule=None,
+               figure='figure', extra_defs='', hrule=None, equal=False,
                vrule=None, post_process='', label='', caption='',
                sparsify=1, clean_index=False):
     """
@@ -1764,10 +1935,10 @@ def df_to_tikz(df, *, fn_out=None, float_format=None, tabs=None,
     if show_index:
         if isinstance(df.index, pd.MultiIndex):
             nc_index = len(df.index.levels)
-            df = df.copy().reset_index(drop=False, col_level=df.columns.nlevels - 1)
+            # df = df.copy().reset_index(drop=False, col_level=df.columns.nlevels - 1)
         else:
             nc_index = 1
-            df = df.copy().reset_index(drop=False)
+        df = df.copy().reset_index(drop=False, col_level=df.columns.nlevels - 1)
         if sparsify:
             if hrule is None:
                 hrule = set()
@@ -1801,7 +1972,8 @@ def df_to_tikz(df, *, fn_out=None, float_format=None, tabs=None,
     matrix_name = hex(abs(hash(str(df))))
 
     # note this happens AFTER you have reset the index...need to pass number of index columns
-    colw, mxmn, tabs = guess_column_widths(df, nc_index=nc_index, float_format=wfloat_format, tabs=tabs, scale=scale)
+    colw, mxmn, tabs = guess_column_widths(df, nc_index=nc_index, float_format=wfloat_format, tabs=tabs,
+                                           scale=scale, equal=equal)
     # print(colw, tabs)
     logger.debug(f'tabs: {tabs}')
 
@@ -1912,7 +2084,7 @@ def df_to_tikz(df, *, fn_out=None, float_format=None, tabs=None,
         hrule = set(map(python_2_tex, hrule)).union(tb_rules)
     else:
         hrule = list(tb_rules)
-    logger.info(f'hlines: {hrule}')
+    logger.debug(f'hlines: {hrule}')
 
     # why
     yshift = row_sep / 2
@@ -1957,7 +2129,7 @@ def df_to_tikz(df, *, fn_out=None, float_format=None, tabs=None,
                 written.add(cn-1)
 
     if len(mi_vrules) > 0:
-        logger.info(f'Generated vlines {mi_vrules}; already written {written}')
+        logger.debug(f'Generated vlines {mi_vrules}; already written {written}')
         # vertical rules for the multi index
         # these go to the RIGHT of the relevant column and reflect the index columns already
         # mi_vrules = {level of index: [list of vrule columns]
@@ -2011,7 +2183,7 @@ def df_to_tikz(df, *, fn_out=None, float_format=None, tabs=None,
     return sio.getvalue()
 
 
-def guess_column_widths(df, nc_index, float_format, tabs=None, scale=1):
+def guess_column_widths(df, nc_index, float_format, tabs=None, scale=1, equal=False):
     """
     estimate sensible column widths for the dataframe [in what units?]
 
@@ -2091,6 +2263,14 @@ def guess_column_widths(df, nc_index, float_format, tabs=None, scale=1):
                 # data all seems about the same width
                 _tabs.append(common_size)
         logger.info(f'Determined tab spacing: {_tabs}')
+        if equal:
+            # see if equal widths makes sense
+            dt = _tabs[nl:]
+            if max(dt) / sum(dt) < 4 / 3:
+                _tabs = _tabs[:nl] + [max(dt)] * (len(_tabs) - nl)
+                logger.info(f'Taking equal width hint: {_tabs}')
+            else:
+                logger.info(f'Rejecting equal width hint')
         # look to rescale, shoot for width of 150 on 100 scale basis
         data_width = sum(_tabs[nl:])
         index_width = sum(_tabs[:nl])
@@ -2100,6 +2280,7 @@ def guess_column_widths(df, nc_index, float_format, tabs=None, scale=1):
             rescale = min(1/scale, target_width / data_width)
             _tabs = [w if i < nl else w * rescale for i, w in enumerate(_tabs)]
             logger.info(f'Rescale {rescale} applied; tabs = {_tabs}')
+
         tabs = _tabs
 
     return colw, mxmn, tabs
