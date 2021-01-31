@@ -41,15 +41,15 @@ from pathlib import Path
 from matplotlib.pyplot import Figure
 import pandas as pd
 from .markdown_make import markdown_make_main
-from .utils import logger, filename
+from .utils import logger
 import re
 import numpy as np
 import unicodedata
 from pandas.io.formats.format import EngFormatter
 import json
 from collections import OrderedDict
-import subprocess
-from platform import platform
+# import subprocess
+# from platform import platform
 from IPython.display import Markdown, display
 from IPython.core.magic import Magics, magics_class, line_magic, cell_magic, line_cell_magic
 from IPython.core.magic_arguments import argument, magic_arguments, parse_argstring
@@ -131,7 +131,7 @@ class PresentationManager(object):
                  file_name='',
                  fig_format='pdf', output_style='with_table',
                  default_float_fmt=None, tidy=False,
-                 default_table_font_size=0.15, tacit_override=False,
+                 tacit_override=False,
                  pdf_engine='')
 
         file_name of output, including extension
@@ -173,14 +173,94 @@ class PresentationManager(object):
         :param output_style: caption (caption in main doc just numbers in include),
                     in-line (all in main doc) or with_table (all in include file)
         :param default_float_fmt:
-        :param default_table_font_size: float or zero, used as a custom font size
 
         """
 
-        self.config_all = json.load(Path(config_file).open('r', encoding='utf-8'))
-        self.config_file = config_file
+        if config_file is not None:
+            p = Path(config_file)
+            if p.exists():
+                self.config_all = json.load(Path(config_file).open('r', encoding='utf-8'))
+                self.config_file = config_file
+            else:
+                raise ValueError(f'Error: file {config_file} does not exist.')
+        else:
+            self.config_all = None
+            self.config_file = None
+
+        # get all the other variables defined in init:
         self.builds_id = None
         self.temp_file = None
+        # other class variables related to config file
+        self.config = None
+        self.tops_id = ''
+        self.raw_top_value = ''
+        self.option_id = ''
+
+        # read in builds level global variables
+        self.title = ''
+        self.subtitle = ''
+
+        # files are named key-top_value-...
+        self.key = ''
+        self.top_name = ''
+        self.top_value = ''
+
+        # file specific, set manually
+        self.base_dir = None
+        self.file_name = ''
+        self.file = None
+        self.out_dir = None
+        self.figure_dir = None
+        self.table_dir = None
+
+        # admin
+        self.fig_format = 'pdf'
+        self.output_style = 'with_table'
+        self.pdf_engine = ''
+        self.default_float_fmt = PresentationManager.default_float_format
+
+        self.unit = 1000
+        self.capital_standard = 0.996
+
+        # unless over-ridden, start counting at 1, appendices count negative
+        self.section = 0
+        self.appendix = 0
+
+        # output
+        self.toc = []
+        self._slides = set()
+        self.sios = None
+
+        # starts in base self.config: active and not in debug mode
+        self._tacit_override = False
+        self._active = True
+        self._debug = False
+        self._debug_state = False
+        # avoid using dm because updated gets in a loop on the dates...
+        self.debug_dm_file = None
+
+    def activate(self, title, subtitle, key, top_name, raw_top_value, top_value, base_dir, filestem=''):
+        """
+        set all the options to work independently of a config file
+
+        key = pirc
+        top_value = Ia  (drives file name and fig/table saved name)
+        raw_top_value I excludes options (for section names and TOC)
+        top_name = chapter, module, etc.
+
+        for files the name is {key}-{top_value}-...
+        the main file is callled {key}-{top_value}.md unless different filestem provided
+
+        :return:
+        """
+        self.title = title
+        self.subtitle = subtitle
+        self.key = key
+        self.top_name = top_name
+        self.top_value = top_value
+        self.base_dir = Path(base_dir)
+        self.file_name = f'{key}-{top_value}.md' if filestem == '' else f'{filestem}.md'
+        self._complete_setup()
 
     def activate_build(self, builds_id):
         """
@@ -193,20 +273,91 @@ class PresentationManager(object):
 
         # specification of course, portfolio etc.
         self.config = self.config_all['builds'][builds_id]
-
-        # read in builds level global variables
-        self.title = self.config['title']
-        self.key = self.config['key']
-        self.base_dir = Path(self.config['base_dir'])
         self.top_name = self.config['top_name']
         self.fig_format = self.config['fig_format']
         self.output_style = self.config['output_style']
         self.pdf_engine = self.config['pdf_engine']
         self.unit = self.config['unit']
+        self.base_dir = Path(self.config['base_dir'])
         self.capital_standard = self.config['capital_standard']
 
+        # read in builds level global variables
+        self.title = self.config['title']
+        self.key = self.config['key']
+
+    def activate_top(self, tops_id, option_id, tidy=False):
+        """
+        Activate presentation for a particular top level part, chapter, module (the top_name)
+        Corresponds to the different ipymd/md files that do the work to make the presentations.
+
+        Output focus; the book of business is defined in builds
+
+        option_id is appended to top_value for a distinguishing key
+
+        :param tops_id:
+        :param option_id:
+        :param tidy:
+        :return:
+        """
+        # for this specific document
+        self.tops_id = tops_id
+        top = self.config_all['tops'][tops_id]
+        self.subtitle = top['subtitle']
+        self.raw_top_value = top['top_value']
+        self.option_id = option_id
+        self.top_value = self.raw_top_value + self.option_id
+
+        # no choice of filename
+        self.file_name = f'{self.key}-{self.top_value}.md'
+
+        self._complete_setup()
+        # tidy up
+        if tidy:
+            self.tidy_up()
+
+    def _complete_setup(self):
+        """
+        admin around files etc.
+        ensures all directories exist
+        :return:
+        """
+        # file specific, set manually
+        # main file for output and ancillary directories
+        self.file = self.base_dir / self.file_name
+        logger.info(f'base_dir = {self.base_dir.resolve()}')
+        logger.info(f'output file = {self.file.resolve()}')
+        self.base_dir.mkdir(parents=True, exist_ok=True)
+        self.out_dir = self.base_dir / 'pdf'
+        self.out_dir.mkdir(parents=True, exist_ok=True)
+        self.figure_dir = self.base_dir / 'img'
+        self.figure_dir.mkdir(parents=True, exist_ok=True)
+        self.table_dir = self.base_dir / 'table'
+        self.table_dir.mkdir(parents=True, exist_ok=True)
+        # for debug output
+        (self.table_dir / 'pdf').mkdir(parents=True, exist_ok=True)
+
+        # unless over-ridden, start counting at 1, appendices count negative
+        self.section = 0
+        self.appendix = 0
+
+        # output
+        self.toc = []
+        self._slides = set()
+        self.sios = OrderedDict(front=StringIO(), contents=StringIO(), summary=StringIO(), body=StringIO(),
+                                appendix=StringIO())
+
+        # starts in base self.config: active and not in debug mode
+        self._tacit_override = False
+        self._active = True
+        self._debug = False
+        # avoid using dm because updated gets in a loop on the dates...
+        self.debug_dm_file = self.base_dir / 'dm2.md'
+
+        # start by writing the toc header
+        self._write_buffer_('contents', '## Contents\n')
+
     def __getitem__(self, item):
-        if item in self.config:
+        if self.config and item in self.config:
             return self.config[item]
         else:
             raise ValueError(f'Error, {self} has no item {item}.')
@@ -272,69 +423,6 @@ class PresentationManager(object):
         elif kind in ['net', 'n']:
             pp(self.config['net_portfolio'])
 
-    def activate_top(self, tops_id, tidy=False):
-        """
-        Activate presentation for a particular top level part, chapter, module (the top_name)
-        Corresponds to the different ipymd/md files that do the work to make the presentations.
-
-        Output focus; the book of business is defined in builds
-
-        :param tops_id:
-        :param tidy:
-        :return:
-        """
-        # for this specific document
-        self.tops_id = tops_id
-        top = self.config_all['tops'][tops_id]
-        self.subtitle = top['subtitle']
-        self.top_value = top['top_value']
-
-        # no choice of filename
-        self.file_name = f'{self.key}-{self.top_value}.md'
-
-        # file specific, set manually
-        self.default_float_fmt = PresentationManager.default_float_format
-
-        # deprecated
-        self.default_table_font_size = 0.15
-
-        # main file for output and ancillary directories
-        self.file = self.base_dir / self.file_name
-        logger.info(f'base_dir = {self.base_dir.resolve()}')
-        logger.info(f'output file = {self.file.resolve()}')
-        self.base_dir.mkdir(parents=True, exist_ok=True)
-        self.out_dir = self.base_dir / 'pdf'
-        self.out_dir.mkdir(parents=True, exist_ok=True)
-        self.figure_dir = self.base_dir / 'img'
-        self.figure_dir.mkdir(parents=True, exist_ok=True)
-        self.table_dir = self.base_dir / 'table'
-        self.table_dir.mkdir(parents=True, exist_ok=True)
-        # for debug output
-        (self.table_dir / 'pdf').mkdir(parents=True, exist_ok=True)
-
-        # unless over-ridden, start counting at 1, appendices count negative
-        self.section = 0
-        self.appendix = 0
-
-        # tidy up
-        if tidy:
-            self.tidy_up()
-
-        # output
-        self.toc = []
-        self._slides = set()
-        self.sios = OrderedDict(front=StringIO(), contents=StringIO(), summary=StringIO(), body=StringIO(),
-                                appendix=StringIO())
-
-        # starts in base self.config: active and not in debug mode
-        self._tacit_override = False
-        self._active = True
-        self._debug = False
-        # avoid using dm because updated gets in a loop on the dates...
-        self.debug_dm_file = self.base_dir / 'dm2.md'
-
-        # start by writing the toc header
-        self._write_buffer_('contents', '## Contents\n')
 
     def reset(self):
         """
@@ -343,7 +431,7 @@ class PresentationManager(object):
 
         :return:
         """
-        self.activate_top(self.tops_id)
+        self.activate_top(self.tops_id, self.option_id)
         self.debug = False
 
     def describe_portfolio(self):
@@ -396,7 +484,9 @@ class PresentationManager(object):
         prefix = ''
         if self.top_name != '':
             # prefix = f'{self.top_name} {self.top_value}'
-            prefix = f'{self.top_value}.'
+            prefix = f'{self.raw_top_value}.'
+        # not sure this is a good idea...with versions it intros trivial differences
+        # prefix = ''
         if buf == 'body':
             self.section += 1
             return f'{prefix}{self.section:0>2d}. ', self.section
@@ -429,7 +519,7 @@ class PresentationManager(object):
                 tl = self.make_title(m[0])
                 ln = f"# {s} {tl}"
                 stxt[i] = ln
-                self.toc.append((self.top_value, s_no, tl))
+                self.toc.append((self.raw_top_value, s_no, tl))
             else:
                 # title case ## headings too
                 m2 = re.findall('^## (.*)', ln)
@@ -445,7 +535,8 @@ class PresentationManager(object):
     write = text
     blob = text
 
-    def figure(self, f, label, buf='body', caption="", height="", new_slide=True, tacit=False, promise=False, **kwargs):
+    def figure(self, f, label, buf='body', caption="", height="", new_slide=True, tacit=False, promise=False,
+               option=True, **kwargs):
         """
         add a figure
 
@@ -462,6 +553,7 @@ class PresentationManager(object):
         :param new_slide:
         :param tacit:
         :param promise:  promise mode: just save the figure with appropriate name
+        :param option:
         :param kwargs:
         """
         if not self.active:
@@ -478,13 +570,16 @@ class PresentationManager(object):
 
         slide_caption = self.make_title(label)
         label = self.make_safe_label(label)
-        fig_file = self.figure_dir / f'{self.key}-{self.top_value}-{label}.{self.fig_format}'
+        if option:
+            fig_file = self.figure_dir / f'{self.key}-{self.top_value}-{label}.{self.fig_format}'
+        else:
+            fig_file = self.figure_dir / f'{self.key}-{self.raw_top_value}-{label}.{self.fig_format}'
         fig_file_local = f'img/{fig_file.name}'
         if fig_file.exists():
             logger.warning(f'File {fig_file} already exists...over-writing.')
         if self.fig_format == 'png' and 'dpi' not in kwargs:
             kwargs['dpi'] = 600
-            logger.info("adding dpi")
+            logger.info("adding 600 dpi")
         f.savefig(fig_file,  **kwargs)
 
         # not the caption, that can contain tex
@@ -523,7 +618,7 @@ class PresentationManager(object):
         if self.tacit_override or not tacit:
             display(Markdown(text_out))
 
-    def save(self, dir, filestem, body):
+    def save(self, dir, filestem, body, option):
         """
         just save body string to filename
         return the relevant include file
@@ -534,7 +629,10 @@ class PresentationManager(object):
         :return:
         """
         filestem = self.make_safe_label(filestem)
-        filename = f'{dir}/{self.key}-{self.top_value}-{filestem}.md'
+        if option:
+            filename = f'{dir}/{self.key}-{self.top_value}-{filestem}.md'
+        else:
+            filename = f'{dir}/{self.key}-{self.raw_top_value}-{filestem}.md'
         file = self.base_dir / filename
 
         with file.open('w', encoding='utf-8') as f:
@@ -547,7 +645,7 @@ class PresentationManager(object):
                    float_format=None, tabs=None,
                    show_index=True, scale=0.717,
                    figure='figure', hrule=None,
-                   equal=False,
+                   equal=False, option=True,
                    vrule=None, sparsify=1):
         """
 
@@ -601,9 +699,12 @@ class PresentationManager(object):
 
         # added a local bufer so output works better with debug model: need a single call to ._write_buffer_
         sio_temp = StringIO()
-        table_file = self.table_dir / f'{self.key}-{self.top_value}-{label}.md'
+        if option:
+            table_file = self.table_dir / f'{self.key}-{self.top_value}-{label}.md'
+        else:
+            table_file = self.table_dir / f'{self.key}-{self.raw_top_value}-{label}.md'
         if table_file.exists():
-            logger.warning(f'File {table_file} exists, over-wriring.')
+            logger.debug(f'File {table_file} exists, over-writing.')
         table_file_local = f'table/{table_file.name}'
 
         if new_slide and not promise:
@@ -717,8 +818,6 @@ class PresentationManager(object):
         :param text:
         :return:
         """
-        # sublime text-esque removal of white space
-        text = re.sub('\s+$', '\n', text, flags=re.MULTILINE)
         # find the sections and add labels
         sections = re.findall('^(## .+)', text, re.MULTILINE)
         for slide_heading in sections:
@@ -735,7 +834,7 @@ class PresentationManager(object):
 
         # optionally write debug file
         if self.debug in ('on', 'append', True):
-            logger.info('In debug mode...writing dm.md')
+            logger.info(f'In debug mode...writing {self.debug_dm_file}')
             mode = 'a' if self.debug == 'append' else 'w'
             self.debug_dm_file.open(mode, encoding='utf-8').write(text)
 
@@ -794,7 +893,11 @@ class PresentationManager(object):
         """
         # update toc
         self.make_toc(decorate)
-        return '\n\n'.join(buf.getvalue() for buf in self.sios.values())
+        # assemble parts
+        s = '\n\n'.join(buf.getvalue().strip() for buf in self.sios.values())
+        # sublime text-esque removal of white space
+        s = re.sub(' *\n(\n?)\n*', r'\n\1', s, flags=re.MULTILINE)
+        return s
 
     def make_toc(self, decorate=''):
         """
@@ -813,7 +916,7 @@ class PresentationManager(object):
         #                      key=sort_fun)
         toc_body = sorted([i for i in self.toc if i[1] > 0], key=lambda x : x[1])
         toc_appendix = sorted([i for i in self.toc if i[1] < 0], key=lambda x : x[1])
-        self.sios['contents'].write(f'# Table of Contents\n## {self.top_name} {self.top_value} Contents\n\n')
+        self.sios['contents'].write(f'# Table of Contents\n## {self.top_name} {self.raw_top_value} Contents\n\n')
         appendix_spacer_needed = True
         for t, s, c in toc_body + toc_appendix:
             s_ = int_to_roman(-s) if s < 0 else s
@@ -1068,6 +1171,7 @@ class PresentationManager(object):
         # short = short summary that goes to website
         sio = StringIO()
         short = StringIO()
+        git = StringIO()
         # start by pretty printing the config file
         sio.write(f'# **{self.title}** Configuration File\n')
 
@@ -1106,6 +1210,7 @@ class PresentationManager(object):
         for v in tops.values():
             k = v['top_value']
             f = dir_path / f"pirc-{k}.md"
+            fn = v['file']
             st = v['subtitle']
             logger.info(f.name)
             if f.exists():
@@ -1120,8 +1225,10 @@ class PresentationManager(object):
                     updated = 'not created'
                 with resolved_f.open('r', encoding='utf-8') as fh:
                     linked_st = f'[{st}](pirc-{k}.pdf)'
+                    git_linked_st = f'[{st}](https://github.com/mynl/PIRC/blob/main/Python/{fn})'
                     sio.write(f'\n### {k}. {linked_st}\n\n')
                     short.write(f'* {k}. {linked_st}\n')
+                    git.write(f'* {k}. {git_linked_st}\n')
                     # do not start off in a code block
                     in_code_block = False
                     for line in fh:
@@ -1141,6 +1248,7 @@ class PresentationManager(object):
                                         sio.write(f"* **{s:s}**\n")
                                         if s != 'Table of Contents' and s[:8] != 'Appendix':
                                             short.write(f'\t* {s}\n')
+                                            git.write(f'\t* {s}\n')
                                     elif l == 2:
                                         # slide give numbers
                                         if s.strip() == last_slide:
@@ -1171,10 +1279,13 @@ class PresentationManager(object):
             else:
                 sio.write(f'\n## {k}. {st} (file does not exist)\n\n')
                 short.write(f'* {k}. {st} (coming soon)\n')
+                git.write(f'* {k}. {st} (coming soon)\n')
 
         long_md = sio.getvalue()
         short_md = short.getvalue()
         short_html = pypandoc.convert(short_md, 'html', 'markdown')
+        git_md = git.getvalue()
+        # git_html = pypandoc.convert(git_md, 'html', 'markdown')
         stripper = 'Individual Module Contents'
         long_html = pypandoc.convert(long_md[long_md.find(stripper) + len(stripper):], 'html', 'markdown')
 
@@ -1183,7 +1294,7 @@ class PresentationManager(object):
         with Path('../generated/html/pirc-long-contents.html').open('w', encoding='utf-8') as f:
             f.write(long_html)
 
-        return long_md, short_md
+        return long_md, short_md, git_md
 
         # process output to HTML
         # out_file_html = dir_path / f'{out_name}.html'
@@ -1194,10 +1305,10 @@ class PresentationManager(object):
         # print(args)
         # subprocess.Popen(args)
 
-    def uber_deck(self, subtitle, font_size=9, pdf_engine='cla: --pdf-engine=lualatex'):
+    def uber_deck(self, subtitle, font_size=9, pdf_engine=''):
         """
         make a deck combining all available markdpown files
-
+        try cla: --pdf-engine=lualatex if needed
         :return:
         """
         sio = StringIO()
@@ -1222,7 +1333,7 @@ class PresentationManager(object):
                     else:
                         # yaml line, ignored
                         pass
-        out = self.base_dir / f'{self.key}_uber.md'
+        out = self.base_dir / f'{self.key}-uber.md'
         with out.open('w', encoding='utf-8') as f:
             f.write(sio.getvalue())
 
@@ -1293,7 +1404,7 @@ class PresentationManager(object):
         return dfall
 
     @staticmethod
-    def generic_combine(dir_path, pattern, columns, hash_length=50):
+    def combine_generic(dir_path, pattern, columns, hash_length=50, expand_includes=False, exclude_yaml=True):
         """
         generic version of combine that will apply to anything (e.g., the book!)
 
@@ -1311,9 +1422,7 @@ class PresentationManager(object):
         # keep track of subtitles and section numbering
         # going to assume there are no comments in code...
 
-        cwd = os.getcwd()
-        os.chdir(dir_path)
-
+        # make the search string
         s = ''
         for i, t in enumerate(columns[:-2]):
             s += f'^({"#" * (i+1)} .*)$|'
@@ -1324,28 +1433,41 @@ class PresentationManager(object):
         dfs = []
         fs = []
 
-        for f in dir_path.glob(pattern):
+        cwd = os.getcwd()
+        if dir_path.is_file():
+            search = [dir_path]
+            os.chdir(dir_path.parent)
+        else:
+            os.chdir(dir_path)
+            search = dir_path.glob(pattern)
+
+        for f in search:
             # fourth argument returns before doing any real work
             logger.info(f'processing {f}')
             fs.append(f.stem)
-            resolved_f = markdown_make_main('', str(f), f.stem, None)
-            # this is a TMP file
-            logger.info(resolved_f)
-            resolved_f = Path(resolved_f)
+            if expand_includes:
+                resolved_f = markdown_make_main('', str(f), f.stem, None)
+                # this is a TMP file
+                logger.info(f'Expanded to {resolved_f}')
+                resolved_f = Path(resolved_f)
+            else:
+                resolved_f = f
             with resolved_f.open('r', encoding='utf-8') as fh:
                 txt = fh.read()
                 stxt = regexp.split(txt)
                 split = [stxt[1:][j * ngroups:j * ngroups + ngroups]
                          for j in range((len(stxt) - 1) // ngroups)]
-                if split[0][2] == '---':
+                if exclude_yaml and split[0][2] == '---':
                     split = split[2:]
                 # set the index to correspond to page numbers in the PDF (actual pages, not on-slide pages; no pauses)
+                start = 2 if exclude_yaml else 1
                 df = pd.DataFrame(split,
                                   columns=columns,
-                                  index=range(2, len(split) + 2))
+                                  index=range(start, len(split) + start))
                 dfs.append(df)
             # be tidy
-            resolved_f.unlink()
+            if expand_includes and resolved_f is not f:
+                resolved_f.unlink()
 
         dfall = pd.concat(dfs, keys=fs, names=['top', 'idx'])
         dfall['ref'] = dfall.apply(lambda x: x.iloc[:-1].str.cat(), axis=1)
@@ -1353,10 +1475,12 @@ class PresentationManager(object):
         dfall['length'] = [len(i) for i in dfall.content]
         dfall[['kind', 'title']] = dfall.ref.str.extract('(##*) (.*)')
         dfall = dfall[['kind', 'title', 'content', 'length']].copy()
+        dfall['level'] = dfall.kind.str.len().fillna(0).astype(int)
         dfall['hash'] = [PresentationManager.short_hash(i, hash_length) for i in dfall.content]
-        dfall['ititle'] = [ '\t' * len(i) + j for (i, j) in dfall[['kind', 'titles']].iterrows()]
-        # for k, v in tops.items():
-        #     dfall.loc[(v['top_value'], 1), :] = ['.', v['subtitle'], '', 0, v['top_value']*4]
+        idx = (dfall.level > 0)
+        indent = '    '
+        dfall['ititle'] = ''
+        dfall.loc[idx, 'ititle'] = [ indent * lvl + t for _, (lvl, t) in dfall.loc[idx, ['level', 'title']].iterrows()]
         dfall = dfall.sort_index()
         dfall['title'] = [PresentationManager.remove_label(i) for i in dfall['title']]
 
@@ -1454,6 +1578,21 @@ class PresentationManager(object):
             dfl = df.copy().set_index('hash')
             f.write(dfl.loc[hash_list, :].content.str.cat())
 
+    def toggle_debug(self, onoff):
+        """
+        onoff == on - set debug=True but remember previous state
+        onoff == off - restore previous state
+        :param onoff:
+        :return:
+        """
+
+        if onoff == "on":
+            self._debug_state = self.debug
+            self.debug = True
+
+        elif onoff == 'off':
+            self.debug = self._debug_state
+
 
 @magics_class
 class PresentationManagerMagic(Magics):
@@ -1468,6 +1607,7 @@ class PresentationManagerMagic(Magics):
     @magic_arguments('%pmb')
     @argument('-a', '--appendix', action='store_true', help='Mark as appendix material.')
     @argument('-c', '--code', action='store_true', help='Enclose in triple quotes as Python code.')
+    @argument('-d', '--debug', action='store_true', help='Turn debug on temporarilty .')
     @argument('-f', '--fstring', action='store_true', help='Convert cell into f string and evaluate.')
     @argument('--front', action='store_true', help='Mark as front matter, before the toc.')
     @argument('-i', '--ignore', action='store_true', help='Ignore the cell, turns it into a comment')
@@ -1508,16 +1648,23 @@ class PresentationManagerMagic(Magics):
                 else:
                     temp = f'f"""{cell}"""'
                 cell = self.shell.ev(temp)
+            if args.debug:
+                self.shell.ev('PM.toggle_debug("on")')
             self.shell.ev(f'PM.text("""{cell}""", buf="{buf}", tacit={args.tacit})')
+            if args.debug:
+                self.shell.ev('PM.toggle_debug("off")')
 
     @line_cell_magic
     @magic_arguments('%pmf')
     @argument('-a', '--appendix', action='store_true', help='Mark as appendix material.')
     @argument('-c', '--command', action='store_true', help='Load the underlying command into the current cell')
+    @argument('-d', '--debug', action='store_true', help='Turn debug on temporarilty .')
     @argument('-f', '--fstring', action='store_true', help='Convert caption into f string and evaluate.')
     @argument('-h', '--height', type=float, default=0.0, help='Vertical size, generates height=height clause.')
     @argument('-i', '--ignore', action='store_true', help='Ignore the cell, turns into a comment')
     @argument('-n', '--new_slide', action='store_false', help='Set to suppress new slide.')
+    @argument('-o', '--option', action='store_true',
+              help='Set option for tables that vary with options, uses decorated top_value filename.')
     @argument('-p', '--promise', action='store_true', help='Promise: write file but append nothing to stream')
     @argument('-s', '--summary', action='store_true', help='Mark as summary material (exlusive with appendix).')
     @argument('-t', '--tacit', action='store_true', help='tacit: suppress output as Markdown')
@@ -1563,8 +1710,8 @@ class PresentationManagerMagic(Magics):
                 caption = ""
 
             logger.info(caption)
-            s = f'promise = PM.figure({f}, "{label}", buf="{buf}", caption="""{caption}""", new_slide={args.new_slide}, ' \
-                f'tacit={args.tacit}, promise={args.promise}'
+            s = f'promise = PM.figure({f}, "{label}", buf="{buf}", caption="""{caption}""", ' \
+                f'new_slide={args.new_slide}, tacit={args.tacit}, promise={args.promise}, option={args.option}'
             if args.height:
                 s += f', height={args.height}'
             s += ')'
@@ -1582,12 +1729,18 @@ class PresentationManagerMagic(Magics):
         if args.command:
             self.load_cell(s, line, cell)
         else:
+            if args.debug:
+                self.shell.ev('PM.toggle_debug("on")')
             self.shell.ex(s)
+            if args.debug:
+                self.shell.ev('PM.toggle_debug("off")')
 
     @cell_magic
     @magic_arguments('%pmsave')
     @argument('-f', '--fstring', action='store_true', help='Convert caption into f string and evaluate.')
     @argument('-i', '--ignore', action='store_true', help='Ignore the cell, turns into a comment')
+    @argument('-o', '--option', action='store_true',
+              help='Set option for tables that vary with options, uses decorated top_value filename.')
     @argument('-v', '--variable', type=str, default='', help='Variable name for output, default promise')
     def pmsave(self, line, cell):
         """
@@ -1622,7 +1775,7 @@ class PresentationManagerMagic(Magics):
         body = '\n'.join(body)
         var = args.variable if args.variable != '' else 'promise'
 
-        s = f'{var} = PM.save("{dir}", "{filestem}", """{body}""")'
+        s = f'{var} = PM.save("{dir}", "{filestem}", """{body}""", {args.option})'
         logger.debug(s[:100])
         self.shell.ex(s)
 
@@ -1640,12 +1793,16 @@ class PresentationManagerMagic(Magics):
     @line_cell_magic
     @magic_arguments('%pmt')
     @argument('-a', '--appendix', action='store_true', help='Mark as appendix material.')
+    @argument('-b', '--tabs', type=str, default='', help='Set tabs.')
     @argument('-c', '--command', action='store_true', help='Load the underlying command into the current cell')
+    @argument('-d', '--debug', action='store_true', help='Turn debug on temporarilty .')
     @argument('-f', '--fstring', action='store_true', help='Convert caption into f string and evaluate.')
     @argument('-h', '--hrule', type=str, default=None, help='Horizontal rule locations eg 1,3,-1')
     @argument('-i', '--ignore', action='store_true', help='Ignore the cell, turns into a comment')
     @argument('-m', '--summary', action='store_true', help='Mark as summary material (exlusive with appendix).')
     @argument('-n', '--new_slide', action='store_false', help='Set to suppress new slide.')
+    @argument('-o', '--option', action='store_true',
+              help='Set option for tables that vary with options, uses decorated top_value filename.')
     @argument('-p', '--promise', action='store_true', help='Promise: write file but append nothing to stream')
     @argument('-q', '--equal', action='store_true', help='Hint the column widths should be equal')
     @argument('-w', '--wide', type=int, default=0, help='Use wide table mode, WIDE number of columns')
@@ -1669,7 +1826,9 @@ class PresentationManagerMagic(Magics):
             df
             label text
             many lines of caption text
-            caption continues.
+            caption continues
+
+        tabs.
 
 
         """
@@ -1702,6 +1861,10 @@ class PresentationManagerMagic(Magics):
             hrule = args.hrule
             vrule = args.vrule
             equal = args.equal
+            option = args.option
+            tabs = args.tabs
+            if tabs != '':
+                tabs = [float(i) for i in tabs.split(',')]
             if hrule:
                 hrule = [int(i) for i in hrule.split(',') if i.isnumeric()]
             if vrule:
@@ -1720,7 +1883,10 @@ class PresentationManagerMagic(Magics):
                     f'tacit={args.tacit}, promise={args.promise}, ' 
                     f'hrule={hrule}, vrule={vrule}, scale={scale}, ' 
                     f'equal={equal}, '
-                    'sparsify=1, figure="table" ' )
+                    f'option={option}, '
+                    'sparsify=1, figure="table"' )
+            if type(tabs) == list:
+                s += f', tabs={tabs} '
             if args.format:
                 s += f''', float_format={ff}'''
             s += ')'
@@ -1739,7 +1905,11 @@ class PresentationManagerMagic(Magics):
         if args.command:
             self.load_cell(s, line, cell)
         else:
+            if args.debug:
+                self.shell.ev('PM.toggle_debug("on")')
             self.shell.ex(s)
+            if args.debug:
+                self.shell.ev('PM.toggle_debug("off")')
 
     def load_cell(self, s, line, cell):
         """

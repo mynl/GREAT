@@ -131,6 +131,8 @@ def float_to_binary(num):
     # representation of the float:
     return ''.join(padded)
 
+# alias
+binary = float_to_binary
 
 # general utilities
 class SimpleAxes():
@@ -513,6 +515,7 @@ class GreatMagics(Magics):
         args = parse_argstring(self.smcsv, line)
         sio = StringIO(cell)
         sep = ('\t' if args.tab else ',')
+        print(sep=='\t')
         df = pd.read_csv(sio, sep)
         if args.output is None:
             return df
