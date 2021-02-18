@@ -526,7 +526,11 @@ def parse_yaml(fn):
             # result will have two useful outputs in \1 and \2
             s = PATTERN.split(l)
             # print_fun(s)
-            key, value = s[1:3]
+            try:
+                key, value = s[1:3]
+            except ValueError:
+                print(s)
+                raise ValueError
             # print_fun(l, key, value)
             if value[0:3] == '-o ':
                 value = '-o {:}{:}'.format(p.parents[0] / 'pdf' / p.stem, '.pdf')

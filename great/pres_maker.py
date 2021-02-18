@@ -1943,9 +1943,9 @@ class PresentationManagerMagic(Magics):
             sline = line.split(' ')
             status = [c in self.shell.user_ns for c in sline]
             if np.all(status):
-                logger.info(f'All of {line} variables exist...skipping recalc.')
+                logger.info(f'Skipping recalc: all of {line} variables exist.')
             else:
-                logger.info('Missing variables..recomputing cell.')
+                logger.info('Recomputing cell: missing variables.')
                 self.shell.ex(cell)
 
 
@@ -1970,7 +1970,7 @@ def _sparsify(col):
 def _sparsify_mi(mi):
     """
     as above for a multi index level, without the benefit of the index...
-    really all shoudl use this function
+    really all should use this function
     :param mi:
     :return:
     """
@@ -2346,9 +2346,6 @@ def df_to_tikz(df, *, fn_out=None, float_format=None, tabs=None,
     if fout:
         with fout.open('w', encoding='utf-8') as f:
             f.write(sio.getvalue())
-            # for debug only
-            if lt != '':
-                f.write(f'\n\n# A section\nSome text. And a reference \\cref{{{lt}}}')
 
     return sio.getvalue()
 

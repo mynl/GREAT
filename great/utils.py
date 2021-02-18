@@ -17,7 +17,7 @@ from io import StringIO
 # from numpy import floor
 # for magics
 from IPython import get_ipython
-from IPython.core.magic import line_magic, cell_magic, Magics, magics_class
+from IPython.core.magic import line_magic, cell_magic, Magics, magics_class, line_cell_magic
 from IPython.core.magic_arguments import argument, magic_arguments, parse_argstring
 from datetime import datetime
 import logging
@@ -493,6 +493,7 @@ class GreatMagics(Magics):
         :param cell:
         :return:
         """
+        print('DEPRECATED\n'*10)
         if line == '':
             line = 6
         s = self.sf(f'1 1 {line} {line} __return__', cell)
@@ -538,6 +539,19 @@ class GreatMagics(Magics):
             ml = max(map(len, dir(x)))
             fs = f'{{i:<{ml}s}}'
             print('\t'.join([fs.format(i=i) for i in dir(x) if i[0] != '_']))
+
+    @line_cell_magic
+    def help(self, line='', cell=''):
+        """ load the help message as executable """
+        s = """# pandas EngFormatter set with 3dp, change using
+pd.set_option("display.float_format", EngFormatter(3, True))
+agg_logger_level(10) 
+steps_helper() describing drawstyle
+grt.now()
+%config InlineBackend.figure_format = 'svg'
+%load_ext autoreload
+%autoreload 2"""
+        self.shell.set_next_input(s, replace=False)
 
 
 ip = get_ipython()
