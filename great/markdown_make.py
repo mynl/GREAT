@@ -613,15 +613,17 @@ def show_comments(txt):
 
 def update_book_bibfile():
     print_fun('Updating bibliography file...')
-    if PLATFORM == 'win':
-        p_from = Path('/s/telos/biblio/library.bib')
-        p_to = Path('/s/telos/spectral_risk_measures_monograph/docs/library.bib')
-    else:
-        p_from = (Path.home() / 'S/TELOS/Biblio/library.bib')
-        p_to = (Path.home() / 'S/TELOS/spectral_risk_measures_monograph/docs/library.bib')
+    try:
+        if PLATFORM == 'win':
+            p_from = Path('/s/telos/biblio/library.bib')
+            p_to = Path('/s/telos/spectral_risk_measures_monograph/docs/library.bib')
+        else:
+            p_from = (Path.home() / 'S/TELOS/Biblio/library.bib')
+            p_to = (Path.home() / 'S/TELOS/spectral_risk_measures_monograph/docs/library.bib')
 
-    shutil.copy(p_from, p_to)
-
+        shutil.copy(p_from, p_to)
+    except:
+        print_fun('Update bib file failed')
 
 def md_summary(filename_regex, out_name='', dir_path='.'):
     """
