@@ -197,7 +197,11 @@ def markdown_make_main(*argv):
 
     # build the argument list
     if PLATFORM == 'win':
-        args = ["\\users\\{:}\\appdata\\local\\pandoc\\pandoc.exe".format(os.getlogin())]
+        if os.getlogin() == 'steve':
+            args = ["\\users\\{:}\\appdata\\local\\pandoc\\pandoc.exe".format(os.getlogin())]
+        else:
+            args = ["pandoc.exe"]
+
     else:
         args = ["pandoc"]
 
