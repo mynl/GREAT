@@ -363,7 +363,15 @@ def strip_yaml(text):
 
 
 def adjust_output_file(args, dir_name, new_output_name=''):
-    # swap pdf/xx.pdf output for dir_name/xx.tex
+    """
+    swap pdf/xx.pdf output for dir_name/xx.tex
+    Used in quick mode and making template
+
+    :param args:
+    :param dir_name:
+    :param new_output_name:
+    :return:
+    """
     new_filename = ''
     for i, f in enumerate(args):
         if f == '-o':
@@ -378,19 +386,30 @@ def adjust_output_file(args, dir_name, new_output_name=''):
 
 
 def remove_template(args, output_file_name):
-    # remove the arg to use template
+    """
+    remove the arg to use template; called when you make the template
+
+    :param args:
+    :param output_file_name:
+    :return:
+    """
     template_name = ''
     dir_name = ''
     template_found = False
     for i in args:
-        if i[0:10] == '--template':
+        if i.startswith('--template'):
             # print_fun('FOUND')
             args.remove(i)
             # i ='--template=/s/telos/common/sjm-doc-template.tex'
-            eq_loc = i.find("=") + 1
-            dir_end = len(i) - i[::-1].find('/') - 1
-            dir_name = i[eq_loc:dir_end]
-            template_name = i[dir_end + 1:-4]
+            # eq_loc = i.find("=") + 1
+            # dir_end = len(i) - i[::-1].find('/') - 1
+            # dir_name = i[eq_loc:dir_end]
+            # template_name = i[dir_end + 1:-4]
+            # template_found = True
+            # new
+            p = Path(i.split('=')[1])
+            dir_name = str(p.parent)
+            template_name = str(p.name)
             template_found = True
             # print_fun(template_name)
             break
