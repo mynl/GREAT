@@ -212,6 +212,7 @@ class PresentationManager(object):
         self.out_dir = None
         self.figure_dir = None
         self.table_dir = None
+        self.table_dir_name = 'table'
 
         # admin
         self.fig_format = 'pdf'
@@ -239,7 +240,7 @@ class PresentationManager(object):
         # avoid using dm because updated gets in a loop on the dates...
         self.debug_dm_file = None
 
-    def activate(self, title, subtitle, key, top_name, raw_top_value, top_value, base_dir, filestem=''):
+    def activate(self, title, subtitle, key, top_name, top_value, base_dir, filestem=''):
         """
         set all the options to work independently of a config file
 
@@ -258,6 +259,7 @@ class PresentationManager(object):
         self.key = key
         self.top_name = top_name
         self.top_value = top_value
+        self.raw_top_value = top_value
         self.base_dir = Path(base_dir)
         self.file_name = f'{key}-{top_value}.md' if filestem == '' else f'{filestem}.md'
         self._complete_setup()
@@ -331,7 +333,7 @@ class PresentationManager(object):
         self.out_dir.mkdir(parents=True, exist_ok=True)
         self.figure_dir = self.base_dir / 'img'
         self.figure_dir.mkdir(parents=True, exist_ok=True)
-        self.table_dir = self.base_dir / 'table'
+        self.table_dir = self.base_dir / self.table_dir_name
         self.table_dir.mkdir(parents=True, exist_ok=True)
         # for debug output
         (self.table_dir / 'pdf').mkdir(parents=True, exist_ok=True)
@@ -569,7 +571,8 @@ class PresentationManager(object):
                 raise ae
 
         slide_caption = self.make_title(label)
-        label = self.make_safe_label(label)
+        label = self.make_label(label, option)
+        # label = self.make_safe_label(label)
         if option:
             fig_file = self.figure_dir / f'{self.key}-{self.top_value}-{label}.{self.fig_format}'
         else:
@@ -640,12 +643,20 @@ class PresentationManager(object):
 
         return f'@@@include {filename}'
 
+    def make_label(self, label, option):
+        # prepend option id on label to avoid collisions
+        if option:
+            label = f'{self.option_id}-{label}'
+        label = self.make_safe_label(label)
+        label = self.clean_name(label)
+        return label
+
     def tikz_table(self, df, label, *, caption="", buf='body',
                    new_slide=True, tacit=False, promise=False,
                    float_format=None, tabs=None,
                    show_index=True, scale=0.717,
                    figure='figure', hrule=None,
-                   equal=False, option=True,
+                   equal=False, option=True, latex=None,
                    vrule=None, sparsify=1):
         """
 
@@ -675,6 +686,13 @@ class PresentationManager(object):
                 display(df)
             return
 
+        # store the table
+        if option:
+            data_file = self.table_dir / f'data/{self.key}-{self.top_value}-{label}.csv'
+        else:
+            data_file = self.table_dir / f'data/{self.key}-{self.raw_top_value}-{label}.csv'
+        df.to_csv(data_file)
+
         if float_format is None:
             float_format = self.default_float_fmt
 
@@ -684,8 +702,7 @@ class PresentationManager(object):
         # have to handle column names that may include _
         # For now assume there are not TeX names
         slide_caption = self.make_title(label)
-        label = self.make_safe_label(label)
-        label = self.clean_name(label)
+        label = self.make_label(label, option)
 
         # check the caption, that can contain tex
         if not self.clean_underscores(caption):
@@ -695,7 +712,8 @@ class PresentationManager(object):
         s_table = df_to_tikz(df, label=label, caption=caption,
                              float_format=float_format, tabs=tabs,
                              show_index=show_index, scale=scale, equal=equal,
-                             figure=figure, hrule=hrule, vrule=vrule, sparsify=sparsify, clean_index=True)
+                             figure=figure, hrule=hrule, vrule=vrule, sparsify=sparsify,
+                             latex=latex, clean_index=True)
 
         # added a local bufer so output works better with debug model: need a single call to ._write_buffer_
         sio_temp = StringIO()
@@ -705,7 +723,7 @@ class PresentationManager(object):
             table_file = self.table_dir / f'{self.key}-{self.raw_top_value}-{label}.md'
         if table_file.exists():
             logger.debug(f'File {table_file} exists, over-writing.')
-        table_file_local = f'table/{table_file.name}'
+        table_file_local = f'{self.table_dir.stem}/{table_file.name}'
 
         if new_slide and not promise:
             sio_temp.write(f'\n## {slide_caption}\n\n')
@@ -723,7 +741,9 @@ class PresentationManager(object):
             if promise:
                 return f'@@@include {table_file_local}\n\n'
             else:
-                sio_temp.write(f'@@@include {table_file_local}\n\n')
+                _ = f'@@@include {table_file_local}\n\n'
+                sio_temp.write(_)
+                logger.info(_)
                 # self._write_buffer_(buf, f'@@@include {table_file_local}\n\n')
 
         else:
@@ -1065,7 +1085,8 @@ class PresentationManager(object):
         """
         try:
             if type(n) == str:
-                return n.replace('_', r'\_')
+                # quote underscores that are not in dollars
+                return '$'.join((i if n % 2 else i.replace('_', '\\_') for n, i in enumerate(n.split('$'))))
             else:
                 return n
         except:
@@ -1799,6 +1820,8 @@ class PresentationManagerMagic(Magics):
     @argument('-f', '--fstring', action='store_true', help='Convert caption into f string and evaluate.')
     @argument('-h', '--hrule', type=str, default=None, help='Horizontal rule locations eg 1,3,-1')
     @argument('-i', '--ignore', action='store_true', help='Ignore the cell, turns into a comment')
+    @argument('-l', '--latex', type=str, default='', help='latex switches applied to the float container, '
+                                                           'h is the most useful')
     @argument('-m', '--summary', action='store_true', help='Mark as summary material (exlusive with appendix).')
     @argument('-n', '--new_slide', action='store_false', help='Set to suppress new slide.')
     @argument('-o', '--option', action='store_true',
@@ -1863,6 +1886,7 @@ class PresentationManagerMagic(Magics):
             equal = args.equal
             option = args.option
             tabs = args.tabs
+            latex = args.latex
             if tabs != '':
                 tabs = [float(i) for i in tabs.split(',')]
             if hrule:
@@ -1884,6 +1908,7 @@ class PresentationManagerMagic(Magics):
                     f'hrule={hrule}, vrule={vrule}, scale={scale}, ' 
                     f'equal={equal}, '
                     f'option={option}, '
+                    f'latex="{latex}", '
                     'sparsify=1, figure="table"' )
             if type(tabs) == list:
                 s += f', tabs={tabs} '
@@ -1967,18 +1992,19 @@ def _sparsify(col):
     return new_col, rules
 
 
-def _sparsify_mi(mi):
+def _sparsify_mi(mi, bottom_level=False):
     """
     as above for a multi index level, without the benefit of the index...
     really all should use this function
     :param mi:
+    :param bottom_level: for the lowest level ... all values repeated, no sparsificaiton
     :return:
     """
     last = mi[0]
     new_col = list(mi)
     rules = []
     for k, v in enumerate(new_col[1:]):
-        if v == last:
+        if v == last and not bottom_level:
             new_col[k+1] = ''
         else:
             last = v
@@ -1990,7 +2016,7 @@ def _sparsify_mi(mi):
 def df_to_tikz(df, *, fn_out=None, float_format=None, tabs=None,
                show_index=True, scale=0.717, column_sep=3/8, row_sep=1/8,
                figure='figure', extra_defs='', hrule=None, equal=False,
-               vrule=None, post_process='', label='', caption='',
+               vrule=None, post_process='', label='', caption='', latex=None,
                sparsify=1, clean_index=False):
     """
     Write DataFrame to custom tikz matrix to allow greater control of
@@ -2032,6 +2058,7 @@ def df_to_tikz(df, *, fn_out=None, float_format=None, tabs=None,
         lines           lines below these rows, -1 for next to last row etc.; list of ints
         post_process    e.g., non-line commands put at bottom of table
         label
+        latex           arguments after \begin{table}[latex]
         caption         text for caption
 
     Original version see: C:\\S\\TELOS\\CAS\\AR_Min_Bias\\cvs_to_md.py
@@ -2057,7 +2084,7 @@ def df_to_tikz(df, *, fn_out=None, float_format=None, tabs=None,
     """
 
     header = """
-\\begin{{{figure}}}
+\\begin{{{figure}}}{latex}
 \\centering
 {extra_defs}
 \\begin{{tikzpicture}}[
@@ -2166,7 +2193,12 @@ def df_to_tikz(df, *, fn_out=None, float_format=None, tabs=None,
 
     # start writing
     sio = StringIO()
-    sio.write(header.format(figure=figure, extra_defs=extra_defs, scale=scale, column_sep=column_sep, row_sep=row_sep))
+    if latex is None:
+        latex = ''
+    else:
+        latex = f'[{latex}]'
+    sio.write(header.format(figure=figure, extra_defs=extra_defs, scale=scale, column_sep=column_sep,
+                            row_sep=row_sep, latex=latex))
 
     # table header
     # title rows, start with the empty spacer row
@@ -2209,7 +2241,8 @@ def df_to_tikz(df, *, fn_out=None, float_format=None, tabs=None,
     if isinstance(df.columns, pd.MultiIndex):
         for lvl in range(len(df.columns.levels)):
             nl = ''
-            sparse_columns[lvl], mi_vrules[lvl] = _sparsify_mi(df.columns.get_level_values(lvl))
+            sparse_columns[lvl], mi_vrules[lvl] = _sparsify_mi(df.columns.get_level_values(lvl),
+                                                               lvl==len(df.columns.levels)-1)
             for cn, c, al in zip(df.columns, sparse_columns[lvl], align):
                 c = wfloat_format(c)
                 s = f'{nl} {{cell:{ad2[al]}{colw[cn]}s}} '

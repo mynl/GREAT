@@ -49,7 +49,7 @@ def debug_print_fun(*argv):
 
 def markdown_make_main(*argv):
     """
-    When called from ST3 argv will be like
+    When called from ST3 argv will be like but comes from global, it is not passed in, remember
     ['\\s\\tbd\\python\\Markdown_Make.py',
     'C:\\S\\Teaching\\2018-01\\ACT3349\\Notes\\Final.md', 'Final']
 
@@ -95,25 +95,27 @@ def markdown_make_main(*argv):
     :param argv:
     :return:
     """
+
     global print_fun
 
-    if len(argv) < 4:
+    if len(argv)==0:
         print(f'markdown_make_main on {PLATFORM}. JAN 04 2021 VERSION ')
     else:
         print_fun = debug_print_fun
 
     logger.debug(f'ARGS: {argv}')
 
-    if len(argv) > 3:
+    if len(argv):
         # logger.info('Called from Python: setting cwd to parent directory')
         original_cwd = os.getcwd()
         p = Path(argv[1])
         os.chdir(p.parent)
-
-    if len(argv) == 0:
+    else:
         argv = sys.argv
 
     # update biblio file if we appear to be processing the book...
+    # now a link...which appears not to work
+    # mklink /h library.bib ../../biblio/library.bib
     book = pathlib.Path(argv[1])
     if str(book.parent.resolve()).find('spectral_risk_measures_monograph') >= 0 or \
        str(book.parent.resolve()).find('book-hack') >= 0:
@@ -250,6 +252,7 @@ def markdown_make_main(*argv):
 
     if debug_mode not in ('quick', 'maketexformat', 'format', 'makeformat', 'maketemplate'):
         print_fun('EXECUTING MARKDOWN BUILD\n\n{:}\n'.format(' '.join(args)))
+        print_fun(dt)
         # print_fun('RAW args')
         # print_fun(args)
     if debug_mode in ('no run', 'norun'):
@@ -294,11 +297,17 @@ def markdown_make_main(*argv):
         p.communicate()
 
     elif debug_mode in ('true', 'yes', 'on', 'debug'):
-        p = subprocess.Popen(args, creationflags=CREATE_NO_WINDOW, stdout=subprocess.PIPE)
-        p.communicate()
+        if PLATFORM == 'win':
+            p = subprocess.Popen(args, creationflags=CREATE_NO_WINDOW, stdout=subprocess.PIPE)
+            p.communicate()
+        else:
+            p = subprocess.Popen(args, stdout=subprocess.PIPE)
+            p.communicate()
     else:
-        subprocess.Popen(args, creationflags=CREATE_NO_WINDOW)
-
+        if PLATFORM == 'win':
+            subprocess.Popen(args, creationflags=CREATE_NO_WINDOW)
+        else:
+            subprocess.Popen(args)
     return 0
 
 
@@ -556,7 +565,13 @@ def parse_yaml(fn):
                 raise ValueError
             # print_fun(l, key, value)
             if value[0:3] == '-o ':
-                value = '-o {:}{:}'.format(p.parents[0] / 'pdf' / p.stem, '.pdf')
+                out_format = value[3:].strip()
+                if out_format == 'pdf':
+                    value = '-o {:}{:}'.format(p.parents[0] / 'pdf' / p.stem, '.pdf')
+                elif out_format == 'latex':
+                    value = '-o {:}{:}'.format(p.parents[0] / p.stem, '.tex')
+                else:
+                    raise ValueError('Inadmissible type {:} passed as output option'.format(out_format))
             if key in ydic.keys():
                 ydic[key] += value.split(' ')
             else:

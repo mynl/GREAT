@@ -543,7 +543,8 @@ class GreatMagics(Magics):
     @line_cell_magic
     def help(self, line='', cell=''):
         """ load the help message as executable """
-        s = """# pandas EngFormatter set with 3dp, change using
+        s = """# %help
+# pandas EngFormatter set with 3dp, change using
 pd.set_option("display.float_format", EngFormatter(3, True))
 agg_logger_level(10) 
 steps_helper() describing drawstyle
@@ -551,7 +552,7 @@ grt.now()
 %config InlineBackend.figure_format = 'svg'
 %load_ext autoreload
 %autoreload 2"""
-        self.shell.set_next_input(s, replace=False)
+        self.shell.set_next_input(s, replace=True)
 
 
 ip = get_ipython()

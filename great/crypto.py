@@ -6,14 +6,21 @@ https://nitratine.net/blog/post/encryption-and-decryption-in-python/
 
 http://www.blog.pythonlibrary.org/2016/05/18/python-3-an-intro-to-encryption/
 
-The cryptography package aims to be “cryptography for humans” much like the requests library is “HTTP for Humans”. The idea is that you will be able to create simple cryptographic recipes that are safe and easy-to-use. If you need to, you can drop down to low=level cryptographic primitives, which require you to know what you’re doing or you might end up creating something that’s not very secure.
+The cryptography package aims to be “cryptography for humans” much like the requests library is “HTTP for Humans”.
+The idea is that you will be able to create simple cryptographic recipes that are safe and easy-to-use. If you need to,
+you can drop down to low=level cryptographic primitives, which require you to know what you’re doing or you might
+end up creating something that’s not very secure.
 
 If you are using Python 3.5, you can install it with pip, like so:
 
 
 pip install cryptography
 
-You will see that cryptography installs a few dependencies along with itself. Assuming that they all completed successfully, we can try encrypting some text. Let’s give the Fernet module a try. The Fernet module implements an easy-to-use authentication scheme that uses a symmetric encryption algorithm which guarantees that any message you encrypt with it cannot be manipulated or read without the key you define. The Fernet module also supports key rotation via MultiFernet. Let’s take a look at a simple example:
+You will see that cryptography installs a few dependencies along with itself. Assuming that they all completed
+successfully, we can try encrypting some text. Let’s give the Fernet module a try. The Fernet module implements
+an easy-to-use authentication scheme that uses a symmetric encryption algorithm which guarantees that any message
+you encrypt with it cannot be manipulated or read without the key you define. The Fernet module also supports key
+rotation via MultiFernet. Let’s take a look at a simple example:
 
         >>> from cryptography.fernet import Fernet
         >>> cipher_key = Fernet.generate_key()
@@ -28,9 +35,15 @@ You will see that cryptography installs a few dependencies along with itself. As
         >>> decrypted_text = cipher.decrypt(encrypted_text)
         >>> decrypted_text
         b'My super secret message'
-        First off we need to import Fernet. Next we generate a key. We print out the key to see what it looks like. As you can see, it’s a random byte string. If you want, you can try running the generate_key method a few times. The result will always be different. Next we create our Fernet cipher instance using our key.
 
-Now we have a cipher we can use to encrypt and decrypt our message. The next step is to create a message worth encrypting and then encrypt it using the encrypt method. I went ahead and printed our the encrypted text so you can see that you can no longer read the text. To decrypt our super secret message, we just call decrypt on our cipher and pass it the encrypted text. The result is we get a plain text byte string of our message.
+First off we need to import Fernet. Next we generate a key. We print out the key to see what it looks like.
+As you can see, it’s a random byte string. If you want, you can try running the generate_key method a few times.
+The result will always be different. Next we create our Fernet cipher instance using our key.
+
+Now we have a cipher we can use to encrypt and decrypt our message. The next step is to create a message worth
+encrypting and then encrypt it using the encrypt method. I went ahead and printed our the encrypted text so you can
+see that you can no longer read the text. To decrypt our super secret message, we just call decrypt on our cipher
+and pass it the encrypted text. The result is we get a plain text byte string of our message.
 
 """
 
@@ -53,7 +66,7 @@ class SFile():
         # abc123
         sf = SFile('/somewhere/somefile.bin')
         for i in range(10):
-            sf.append(f'More stuf fShort message number {i} of 10; '*i)
+            sf.append(f'More stuff Short message number {i} of 10; '*i)
         print(sf.read())
 
 
