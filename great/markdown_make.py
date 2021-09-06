@@ -319,7 +319,7 @@ def process_includes(txt, dn, color_includes, n_includes, file_map):
     """
     # changed pattern to allow importing nonmarkdown files, e.g. py sourcefiles
     # but, WTF, is this re??
-    includes = re.findall(r'@@@include (\.\./)?([0-9]{3}|[0-9A-Za-z])([^\n]+\.[a-z]+)?', txt)
+    includes = re.findall(r'@@@include ([\./]*)([0-9]{3}|[0-9A-Za-z])([^\n]+\.[a-z]+)?', txt)
     # print_fun(includes)
     for res_ in includes:
         original_match = res = ''.join(res_)
