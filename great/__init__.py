@@ -10,6 +10,7 @@ try:
     from .pres_maker import PresentationManager, de_underscore, df_to_tikz, guess_column_widths
     from .markdown_make import markdown_make_main, md_summary
     from .watcher import Watcher
+    from .image_tools import quilt
 except:
     pass
 
