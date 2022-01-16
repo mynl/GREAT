@@ -279,10 +279,12 @@ class PresentationManager(object):
         self.fig_format = self.config['fig_format']
         self.output_style = self.config['output_style']
         self.pdf_engine = self.config['pdf_engine']
-        self.unit = self.config['unit']
         self.base_dir = Path(self.config['base_dir'])
-        self.capital_standard = self.config['capital_standard']
-
+        try:
+            self.unit = self.config['unit']
+            self.capital_standard = self.config['capital_standard']
+        except KeyError:
+            pass
         # read in builds level global variables
         self.title = self.config['title']
         self.key = self.config['key']
