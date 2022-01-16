@@ -1,4 +1,4 @@
 ## **G**eneralizable **r**eusable **e**xtensible [**a**ctuarial] **t**oolkit.
 
-Some text and code.
+[Documentation](https://www.mynl.com/static/html/index.html).
 
