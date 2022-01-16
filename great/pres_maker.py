@@ -9,9 +9,8 @@ Builds off doc_maker
     * Integrated into magics
 
 
-Usage example
+Usage example::
 
-```
     test_df = pd.DataFrame(dict(x=range(100), y=range(100,200)))
     f, ax = plt.subplots(1,3)
     f = test_df.plot(ax = ax[2])
@@ -27,8 +26,6 @@ Usage example
     doc.write_markdown()
 
     doc.process()
-```
-
 
 v 1.0 Dec 2020 created PresentationManager from DocMaker
 
@@ -41,7 +38,7 @@ from pathlib import Path
 from matplotlib.pyplot import Figure
 import pandas as pd
 from .markdown_make import markdown_make_main
-from .utils import logger
+import logging
 import re
 import numpy as np
 import unicodedata
@@ -71,6 +68,7 @@ import hashlib
 # import string
 # import unicodedata
 
+logger = logging.getLogger(__name__)
 
 # Size = dict(TINY = T = 300
 #     VSMALL = VS = 400
@@ -124,25 +122,23 @@ class PresentationManager(object):
         builds_id -> specification of portfolio, key, base_dir etc.
         tops_id = None -> make contents etc.
 
+        Originally::
 
-        Originally:
-        title, subtitle, key, base_dir, *,
-                 top_name='', top_value='',
-                 file_name='',
-                 fig_format='pdf', output_style='with_table',
-                 default_float_fmt=None, tidy=False,
-                 tacit_override=False,
-                 pdf_engine='')
+            title, subtitle, key, base_dir, *, top_name='', top_value='', file_name='', fig_format='pdf',
+            output_style='with_table', default_float_fmt=None, tidy=False, tacit_override=False,
+            pdf_engine='')
 
-        file_name of output, including extension
+        file_name of output, including extension::
 
-                 pdf_engine='cla: --pdf-engine=lualatex'):
+                 pdf_engine='cla: --pdf-engine=lualatex'
 
         base_dir should be notes (but you need to state that to avoid screw ups)
 
         key = short vignette name prepended to name of all tables and image files; goes with title... uber level
         file_name can be a/b/c/file.md
+
         all intermediate dirs created
+
         images in a/b/c/img
 
         tidy: search through the subfolders of the base output and delete all files key-*.*
@@ -155,6 +151,7 @@ class PresentationManager(object):
 
 
         title
+
         key  becomes key-top_value
         top_name  Module, Part etc.
         top_value  A, B  or I, II or whatever
@@ -170,10 +167,8 @@ class PresentationManager(object):
         :param key: (becomes key-top_value, prepended to file names to cluster them. Should be unique to the doc.
         :param title:
         :param fig_format:
-        :param output_style: caption (caption in main doc just numbers in include),
-                    in-line (all in main doc) or with_table (all in include file)
+        :param output_style: caption (caption in main doc just numbers in include), in-line (all in main doc) or with_table (all in include file)
         :param default_float_fmt:
-
         """
 
         if config_file is not None:
@@ -661,24 +656,43 @@ class PresentationManager(object):
                    equal=False, option=True, latex=None,
                    vrule=None, sparsify=1):
         """
-
         Add a table using TikZ formatter
 
         label used as file name
         force_float = convert input to float first (makes a copy) for col alignment
 
         output_style as table
-            with_table : all output in @@@ file and include in main md file; use when caption is generic
-            caption:   puts caption text in the main markdown file, use when caption will be edited
-            inline: all output in md file directly (not recommended)
 
-        label and columns have _ escaped for TeX but the caption is not - so beware!
+        1. with_table : all output in @@@ file and include in main md file; use when caption is generic
+        1. caption:   puts caption text in the main markdown file, use when caption will be edited
+        1. inline: all output in md file directly (not recommended)
 
-        fn_out=None, float_format=None, tabs=None,
+        label and columns have _ escaped for TeX but the caption is not - so beware!::
+
+            fn_out=None, float_format=None, tabs=None,
                 show_index=True, scale=0.717, height=1.5, column_sep=2, row_sep=0,
                 figure='figure', color='blue!0', extra_defs='', lines=None,
                 post_process='', label='', caption=''
 
+        :param df:
+        :param label:
+        :param caption:
+        :param buf:
+        :param new_slide:
+        :param tacit:
+        :param promise:
+        :param float_format:
+        :param tabs:
+        :param show_index:
+        :param scale:
+        :param figure:
+        :param hrule:
+        :param equal:
+        :param option:
+        :param latex:
+        :param vrule:
+        :param sparsify:
+        :return:
         """
 
         assert not promise or self.output_style == 'with_table'
@@ -764,7 +778,7 @@ class PresentationManager(object):
         """
         the endless quest for the perfect float formatter...
 
-        tester:
+        tester::
 
             for x in 1.123123982398324723947 * 10.**np.arange(-23, 23):
                 print(default_float_format(x))
@@ -1579,9 +1593,9 @@ class PresentationManager(object):
         """
 
         create a doc from a list of slide hashes
-        df = result of running self.combine()
+        ``df = result of running self.combine()``
 
-        call either *list_of_hashes or hash1, hash2, ....
+        call either ``*list_of_hashes`` or ``hash1, hash2, ....``
 
         """
 
@@ -1603,8 +1617,8 @@ class PresentationManager(object):
 
     def toggle_debug(self, onoff):
         """
-        onoff == on - set debug=True but remember previous state
-        onoff == off - restore previous state
+        ``onoff == on``  set debug=True but remember previous state
+        ``onoff == off`` restore previous state
         :param onoff:
         :return:
         """
@@ -2034,29 +2048,29 @@ def df_to_tikz(df, *, fn_out=None, float_format=None, tabs=None,
     others below (Python, zero-based) row number, excluding title row
 
     keyword arguments : value (no newlines in value) escape back slashes!
-    #keyword... rows ignored
+    ``#keyword...`` rows ignored
     passed in as a string to facilitate using them with %%pmt?
 
-    Rules:
-    hrule at i means below row i of the table. (1-based) Top, bottom and below index lines
-    are inserted automatically. Top and bottom lines are thicker.
+    **Rules**
 
-    vrule at i means to the left of table column i (1-based); there will never be a rule to the far
-    right...it looks plebby; remember you must include the index columns!
+    * hrule at i means below row i of the table. (1-based) Top, bottom and below index lines
+      are inserted automatically. Top and bottom lines are thicker.
+    * vrule at i means to the left of table column i (1-based); there will never be a rule to the far
+      right...it looks plebby; remember you must include the index columns!
 
     sparsify  number of cols of multi index to sparsify
 
-    Issue: colun with floats and spaces or missing causess problems (VaR, TVaR, EPD, mean and CV table)
+    Issue: colunn with floats and spaces or missing causess problems (VaR, TVaR, EPD, mean and CV table)
 
     keyword args:
+
         scale           scale applied to whole table - default 0.717
         height          row height, rec. 1 (em)
         column_sep      col sep in em
         row_sep         row sep in em
         figure          table, figure or sidewaysfigure
         color           color for text boxes (helps debugging)
-        extra_defs      TeX defintions and commands put at top of table,
-                        e.g., \\centering
+        extra_defs      TeX defintions and commands put at top of table, e.g., \\centering
         lines           lines below these rows, -1 for next to last row etc.; list of ints
         post_process    e.g., non-line commands put at bottom of table
         label
@@ -2564,5 +2578,6 @@ def int_to_roman(num):
 
 
 ip = get_ipython()
-ip.register_magics(PresentationManagerMagic)
+if ip is not None:
+    ip.register_magics(PresentationManagerMagic)
 

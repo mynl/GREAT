@@ -61,13 +61,13 @@ DIVIDER = '~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~'.encode('utf-8')
 class SFile():
     def __init__(self, file_name, salt_file='prod_key'):
         """
-        Create file buffer and read/write encrypted lines to and from it. E.g.
+        Create file buffer and read/write encrypted lines to and from it. E.g.::
 
-        # abc123
-        sf = SFile('/somewhere/somefile.bin')
-        for i in range(10):
-            sf.append(f'More stuff Short message number {i} of 10; '*i)
-        print(sf.read())
+            # abc123
+            sf = SFile('/somewhere/somefile.bin')
+            for i in range(10):
+                sf.append(f'More stuff Short message number {i} of 10; '*i)
+            print(sf.read())
 
 
         :param file_name: fully qualified filename

@@ -1,0 +1,858 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>great.doc_maker &mdash; GREAT 1.0.0 documentation</title>
+      <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="../../_static/css/theme.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="../../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="../../" id="documentation_options" src="../../_static/documentation_options.js"></script>
+        <script src="../../_static/jquery.js"></script>
+        <script src="../../_static/underscore.js"></script>
+        <script src="../../_static/doctools.js"></script>
+    <script src="../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+            <a href="../../index.html" class="icon icon-home"> GREAT
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../intro.html">Introduction to GREAT</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../code.html">Utilities Module</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../code.html#module-great.markdown_make">MarkdownMake Module</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../code.html#presentationmanager">PresentationManager</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../code.html#module-great.image_tools">Image Toools, Watcher and SFile Crypto</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../code.html#module-great.doc_maker">Older</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">GREAT</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../index.html" class="icon icon-home"></a> &raquo;</li>
+          <li><a href="../index.html">Module code</a> &raquo;</li>
+      <li>great.doc_maker</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for great.doc_maker</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">DocMaker: persist exhibits and tables and make overall document</span>
+
+<span class="sd">For beamer styles, fonts, and colors see</span>
+<span class="sd">https://deic-web.uab.cat/~iblanes/beamer_gallery/individual/default-orchid-serif.html</span>
+
+<span class="sd">Uses sticb from CEA project</span>
+
+<span class="sd">Usage example::</span>
+
+<span class="sd">	test_df = pd.DataFrame(dict(x=range(100), y=range(100,200)))</span>
+<span class="sd">	fg, ax = plt.subplots(1,3)</span>
+<span class="sd">	f = test_df.plot(ax = ax[2])</span>
+
+<span class="sd">	doc = DocMaker.DocMaker(&#39;notes/test1.md&#39;)</span>
+<span class="sd">	doc.section(&#39;Here is the main title &#39;)</span>
+<span class="sd">	doc.subsection(&#39;A dataframe section&#39;)</span>
+<span class="sd">	doc.table(test_df.head(10), &#39;df1&#39;, caption=&#39;Here is a dataframe&#39;)</span>
+<span class="sd">	doc.subsection(&#39;A Figure section&#39;)</span>
+<span class="sd">	doc.figure(f, &#39;x_y&#39;, caption=&#39;Here is a 1x3 figure &#39;, size=&quot;height=30%&quot;)</span>
+<span class="sd">	doc.text(&#39;Some closing thoughts. and a  bunch more stuff.&#39;)</span>
+
+<span class="sd">	doc.write_markdown()</span>
+
+<span class="sd">	doc.process()</span>
+
+
+<span class="sd">v 1.0 Dec 2019</span>
+<span class="sd">v 2.0 Dec 2020</span>
+
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">from</span> <span class="nn">io</span> <span class="kn">import</span> <span class="n">StringIO</span>
+<span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span>
+<span class="kn">from</span> <span class="nn">matplotlib.pyplot</span> <span class="kn">import</span> <span class="n">Figure</span>
+<span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
+<span class="kn">import</span> <span class="nn">datetime</span>
+<span class="kn">from</span> <span class="nn">.markdown_make</span> <span class="kn">import</span> <span class="n">markdown_make_main</span>
+<span class="c1"># from .utils import logger</span>
+<span class="kn">import</span> <span class="nn">logging</span>
+<span class="kn">import</span> <span class="nn">re</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">shutil</span>
+<span class="kn">from</span> <span class="nn">IPython.display</span> <span class="kn">import</span> <span class="n">Markdown</span><span class="p">,</span> <span class="n">display</span>
+
+
+<span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+
+<span class="c1"># import sys</span>
+<span class="c1"># import re</span>
+<span class="c1"># import subprocess</span>
+<span class="c1"># import pathlib</span>
+<span class="c1"># import struct</span>
+<span class="c1"># import numpy as np</span>
+<span class="c1"># import glob</span>
+<span class="c1"># import string</span>
+<span class="c1"># import unicodedata</span>
+
+<div class="viewcode-block" id="default_ff"><a class="viewcode-back" href="../../code.html#great.doc_maker.default_ff">[docs]</a><span class="k">def</span> <span class="nf">default_ff</span><span class="p">(</span><span class="n">x</span><span class="p">):</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">return</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">x</span><span class="si">:</span><span class="s1">.4g</span><span class="si">}</span><span class="s1">&#39;</span>
+    <span class="k">except</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">x</span></div>
+
+<div class="viewcode-block" id="make_title"><a class="viewcode-back" href="../../code.html#great.doc_maker.make_title">[docs]</a><span class="k">def</span> <span class="nf">make_title</span><span class="p">(</span><span class="n">s</span><span class="p">):</span>
+    <span class="n">s</span> <span class="o">=</span> <span class="n">s</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s1">&#39;-&#39;</span><span class="p">,</span> <span class="s1">&#39; &#39;</span><span class="p">)</span><span class="o">.</span><span class="n">title</span><span class="p">()</span>
+    <span class="k">for</span> <span class="n">f</span><span class="p">,</span> <span class="n">t</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">([</span><span class="s1">&#39;Var&#39;</span><span class="p">,</span> <span class="s1">&#39;Tvar&#39;</span><span class="p">,</span> <span class="s1">&#39;Cv&#39;</span><span class="p">,</span> <span class="s1">&#39;Vs&#39;</span><span class="p">,</span> <span class="s1">&#39;Epd&#39;</span><span class="p">,</span> <span class="s1">&#39;Lr&#39;</span><span class="p">,</span> <span class="s1">&#39;Roe&#39;</span><span class="p">],</span> <span class="p">[</span><span class="s1">&#39;VaR&#39;</span><span class="p">,</span> <span class="s1">&#39;TVaR&#39;</span><span class="p">,</span> <span class="s1">&#39;CV&#39;</span><span class="p">,</span> <span class="s1">&#39;vs.&#39;</span><span class="p">,</span> <span class="s1">&#39;EPD&#39;</span><span class="p">,</span> <span class="s1">&#39;LR&#39;</span><span class="p">,</span> <span class="s1">&#39;ROE&#39;</span><span class="p">]):</span>
+        <span class="n">s</span> <span class="o">=</span> <span class="n">s</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="n">f</span><span class="p">,</span> <span class="n">t</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">s</span></div>
+
+<div class="viewcode-block" id="DocMaker"><a class="viewcode-back" href="../../code.html#great.doc_maker.DocMaker">[docs]</a><span class="k">class</span> <span class="nc">DocMaker</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="n">__yaml_doc__</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;---</span>
+<span class="s2">title: &quot;</span><span class="si">{title}</span><span class="s2">&quot;</span>
+<span class="s2">author: Stephen J. Mildenhall</span>
+<span class="s2">date: &quot;</span><span class="si">{created}</span><span class="s2">&quot;</span>
+<span class="s2">fontsize: </span><span class="si">{font_size}</span><span class="s2">pt</span>
+<span class="s2">geometry: margin=</span><span class="si">{margin}</span><span class="s2">in</span>
+<span class="s2">numbersections: </span><span class="si">{number_sections}</span><span class="s2"></span>
+<span class="s2">filter: pandoc-citeproc</span>
+<span class="s2">bibliography: /S/TELOS/biblio/library.bib</span>
+<span class="s2">csl: /S/TELOS/biblio/journal-of-finance.csl</span>
+<span class="s2">link-citations: </span><span class="si">{link_citations}</span><span class="s2"></span>
+<span class="s2">header-includes:</span>
+<span class="s2">    - </span><span class="se">\\</span><span class="s2">input{{/s/teaching/common/general.tex}}</span>
+<span class="s2">cla: --standalone</span>
+<span class="s2">cla: -f markdown+smart+yaml_metadata_block+citations</span>
+<span class="s2">cla: --pdf-engine=xelatex</span>
+<span class="s2">cla: -o </span><span class="si">{file_format}</span><span class="s2"></span>
+<span class="s2">cla: --filter pandoc-citeproc</span>
+<span class="s2">cla: -t </span><span class="si">{to_format}</span><span class="s2"></span>
+<span class="s2">debug: true</span>
+<span class="s2">---</span>
+
+<span class="s2">&quot;&quot;&quot;</span>
+
+    <span class="n">__yaml_beamer__</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;---</span>
+<span class="s2">title: &quot;</span><span class="si">{title}</span><span class="s2">&quot;</span>
+<span class="s2">author: Stephen J. Mildenhall</span>
+<span class="s2">date: &quot;</span><span class="si">{created}</span><span class="s2">&quot;</span>
+<span class="s2">fontsize: </span><span class="si">{font_size}</span><span class="s2">pt</span>
+<span class="s2">numbersections: </span><span class="si">{number_sections}</span><span class="s2"></span>
+<span class="s2">outertheme : metropolis</span>
+<span class="s2">innertheme : metropolis</span>
+<span class="s2">fonttheme  : structurebold</span>
+<span class="s2">colortheme : orchid</span>
+<span class="s2">institute: </span><span class="se">\\</span><span class="s2">convexmark</span>
+<span class="s2">classoption: t</span>
+<span class="s2">toc: true</span>
+<span class="s2">filter: pandoc-citeproc</span>
+<span class="s2">bibliography: /S/TELOS/biblio/library.bib</span>
+<span class="s2">csl: /S/TELOS/biblio/journal-of-finance.csl</span>
+<span class="s2">link-citations: </span><span class="si">{link_citations}</span><span class="s2"></span>
+<span class="s2">header-includes:</span>
+<span class="s2">    - </span><span class="se">\\</span><span class="s2">input{{/s/telos/common/newgeneral.tex}}</span>
+<span class="s2">cla: --standalone</span>
+<span class="s2">cla: -f markdown+smart+yaml_metadata_block+citations</span>
+<span class="s2">cla: --pdf-engine=xelatex</span>
+<span class="s2">cla: -o </span><span class="si">{file_format}</span><span class="s2"></span>
+<span class="s2">cla: --filter pandoc-citeproc</span>
+<span class="s2">cla: -t </span><span class="si">{to_format}</span><span class="s2"></span>
+<span class="s2">debug: true</span>
+<span class="s2">---</span>
+
+
+<span class="s2">&quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">file_name</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="p">,</span> <span class="n">title</span><span class="o">=</span><span class="s1">&#39;DocMaker Document&#39;</span><span class="p">,</span> <span class="n">to_format</span><span class="o">=</span><span class="s1">&#39;latex&#39;</span><span class="p">,</span>
+                 <span class="n">file_format</span><span class="o">=</span><span class="s1">&#39;pdf&#39;</span><span class="p">,</span> <span class="n">fig_format</span><span class="o">=</span><span class="s1">&#39;pdf&#39;</span><span class="p">,</span> <span class="n">output_style</span><span class="o">=</span><span class="s1">&#39;with_table&#39;</span><span class="p">,</span>
+                 <span class="n">tidy</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">back_up</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">label_prefix</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="p">,</span> <span class="n">figure_dir</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="p">,</span>
+                 <span class="n">table_dir</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="p">,</span> <span class="n">unique_mode</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">default_float_fmt</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                 <span class="n">default_table_font_size</span><span class="o">=</span><span class="mi">0</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        file_name of output, including extension</span>
+
+<span class="sd">        key = short vignette name prepended to name of all tables and image files</span>
+<span class="sd">        file_name can be a/b/c/file.md</span>
+<span class="sd">        all intermediate dirs created</span>
+<span class="sd">        images in a/b/c/img</span>
+
+<span class="sd">        tidy: search through the subfolders of the base output and delete all files key-*.*</span>
+
+<span class="sd">        to_format can be latex or beamer (later: add the style elements)</span>
+
+<span class="sd">        depending on how you name the key the existing pdf file may be deleted.</span>
+<span class="sd">        key = vig-{vig}-something and file = key.md then it will NOT be because only key-*.* files</span>
+<span class="sd">        are deleted. This is the recommended approach and is the default if key is &#39;&#39;.</span>
+
+<span class="sd">        :param file_name:</span>
+<span class="sd">        :param key:           defaults to filename excl. the extension</span>
+<span class="sd">        :param title:</span>
+<span class="sd">        :param to_format: latex (doc) or beamer (puts in slide mode...)</span>
+<span class="sd">        :param file_format:</span>
+<span class="sd">        :param output_style: caption (caption in main doc just numbers in include),</span>
+<span class="sd">                    in-line (all in main doc) or with_table (all in include file)</span>
+<span class="sd">        :param tidy: delete old working files, default True</span>
+<span class="sd">        :param back_up: make a back up of the last output file, default True</span>
+<span class="sd">        :param unique_mode: make output file names unique</span>
+<span class="sd">        :param label_prefix: prefix to add to labels for sub part vigs, these are only used in the docs for TeX</span>
+<span class="sd">        accessed labels; they are not used to generate the filename - since these already refer</span>
+<span class="sd">        to the vig name</span>
+<span class="sd">        figure_dir</span>
+<span class="sd">        table_dir over-ride defaults for figure and table outputs</span>
+<span class="sd">        :param default_table_font_size: float or zero, used as a custom font size</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">unique_mode</span> <span class="o">=</span> <span class="n">unique_mode</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">title</span> <span class="o">=</span> <span class="n">title</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">output_style</span> <span class="o">=</span> <span class="n">output_style</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">file_format</span> <span class="o">=</span> <span class="n">file_format</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">fig_format</span> <span class="o">=</span> <span class="n">fig_format</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">to_format</span> <span class="o">=</span> <span class="n">to_format</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">file_name</span> <span class="o">=</span> <span class="n">file_name</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">file</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">file_name</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">label_prefix</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">label_prefix</span><span class="si">}</span><span class="s1">-&#39;</span> <span class="k">if</span> <span class="n">label_prefix</span> <span class="k">else</span> <span class="s1">&#39;&#39;</span>
+        <span class="c1"># just ability to generate a unique number so do not have to be careful labels are unique</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_number</span> <span class="o">=</span> <span class="nb">iter</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="mi">10000</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">labels</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">if</span> <span class="n">default_float_fmt</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">default_float_fmt</span> <span class="o">=</span> <span class="n">default_ff</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">default_float_fmt</span> <span class="o">=</span> <span class="n">default_float_fmt</span>
+        <span class="k">if</span> <span class="n">key</span> <span class="o">==</span> <span class="s1">&#39;&#39;</span><span class="p">:</span>
+            <span class="n">key</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">key</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">file</span><span class="o">.</span><span class="n">stem</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">key</span> <span class="o">=</span> <span class="n">key</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">default_table_font_size</span> <span class="o">=</span> <span class="n">default_table_font_size</span>
+
+        <span class="n">existing</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">file</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">glob</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;**/</span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s1">-*.*&#39;</span><span class="p">))</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">existing</span><span class="p">):</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="s1">&#39;Deleting&#39;</span> <span class="k">if</span> <span class="n">tidy</span> <span class="k">else</span> <span class="s1">&#39;There are&#39;</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">existing</span><span class="p">)</span><span class="si">}</span><span class="s2"> existing file(s)...&quot;</span><span class="p">)</span>
+        <span class="c1"># for f in existing:</span>
+        <span class="c1">#     print(f)</span>
+
+        <span class="k">if</span> <span class="n">tidy</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">existing</span><span class="p">:</span>
+                <span class="n">f</span><span class="o">.</span><span class="n">unlink</span><span class="p">()</span>
+
+        <span class="c1"># just on principle</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;Checking for TMP files...&#39;</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">file</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">glob</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;TMP_*.md&#39;</span><span class="p">):</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;Deleting </span><span class="si">{</span><span class="n">f</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
+            <span class="n">f</span><span class="o">.</span><span class="n">unlink</span><span class="p">()</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">file</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">parents</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">out_dir</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">file</span><span class="o">.</span><span class="n">cwd</span><span class="p">()</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">file</span><span class="o">.</span><span class="n">parent</span> <span class="o">/</span> <span class="s1">&#39;pdf&#39;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">out_dir</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">parents</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="c1"># note this isn&#39;t actually used in markdown_make - that creates the filename itself</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">out_file</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">out_dir</span> <span class="o">/</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">file</span><span class="o">.</span><span class="n">stem</span><span class="si">}</span><span class="s1">.</span><span class="si">{</span><span class="n">file_format</span><span class="si">}</span><span class="s1">&#39;</span>
+
+        <span class="c1"># however it is used here in make a backup</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">out_file</span><span class="o">.</span><span class="n">exists</span><span class="p">()</span> <span class="ow">and</span> <span class="n">back_up</span><span class="p">:</span>
+            <span class="n">backup</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">out_dir</span> <span class="o">/</span> <span class="sa">f</span><span class="s1">&#39;backup/</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">out_file</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s1">&#39;</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Creating back up of </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">out_file</span><span class="si">}</span><span class="s2"> to </span><span class="si">{</span><span class="n">backup</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="n">shutil</span><span class="o">.</span><span class="n">copy</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">out_file</span><span class="p">),</span> <span class="nb">str</span><span class="p">(</span><span class="n">backup</span><span class="p">))</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">to_format</span> <span class="o">=</span> <span class="n">to_format</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">figure_no</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">if</span> <span class="n">figure_dir</span> <span class="o">==</span> <span class="s1">&#39;&#39;</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">figure_dir</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">file</span><span class="o">.</span><span class="n">parent</span> <span class="o">/</span> <span class="s1">&#39;img&#39;</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">figure_dir</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">figure_dir</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">figure_dir</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">parents</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">table_dir_name</span> <span class="o">=</span> <span class="s1">&#39;table&#39;</span>
+        <span class="k">if</span> <span class="n">table_dir</span> <span class="o">==</span> <span class="s1">&#39;&#39;</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">table_dir</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">file</span><span class="o">.</span><span class="n">parent</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">table_dir_name</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">table_dir</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">table_dir</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">table_dir</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">parents</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sio</span> <span class="o">=</span> <span class="n">StringIO</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_off</span> <span class="o">=</span> <span class="kc">False</span>
+
+<div class="viewcode-block" id="DocMaker.make_unique"><a class="viewcode-back" href="../../code.html#great.doc_maker.DocMaker.make_unique">[docs]</a>    <span class="k">def</span> <span class="nf">make_unique</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">label</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot; for labeling exhibits uniquely &quot;&quot;&quot;</span>
+        <span class="n">label</span> <span class="o">=</span> <span class="n">label</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s1">&#39; - &#39;</span><span class="p">,</span> <span class="s1">&#39;-&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s1">&#39; &#39;</span><span class="p">,</span> <span class="s1">&#39;-&#39;</span><span class="p">)</span>
+        <span class="n">label</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">sub</span><span class="p">(</span><span class="s1">&#39;[,.;:]&#39;</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="p">,</span> <span class="n">label</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">unique_mode</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">label</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">labels</span><span class="p">:</span>
+                <span class="n">label</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">label</span><span class="si">}</span><span class="s1">-</span><span class="si">{</span><span class="nb">next</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_number</span><span class="p">)</span><span class="si">}</span><span class="s1">&#39;</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">labels</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">label</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">label</span></div>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">on</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_off</span>
+
+    <span class="nd">@on</span><span class="o">.</span><span class="n">setter</span>
+    <span class="k">def</span> <span class="nf">on</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_off</span> <span class="o">=</span> <span class="ow">not</span> <span class="n">value</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">off</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_off</span>
+
+    <span class="nd">@off</span><span class="o">.</span><span class="n">setter</span>
+    <span class="k">def</span> <span class="nf">off</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_off</span> <span class="o">=</span> <span class="n">value</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">_date_</span><span class="p">():</span>
+        <span class="k">return</span> <span class="s2">&quot;Created {date:%Y-%m-</span><span class="si">%d</span><span class="s2"> %H:%M:%S}&quot;</span><span class="o">.</span> \
+            <span class="nb">format</span><span class="p">(</span><span class="n">date</span><span class="o">=</span><span class="n">datetime</span><span class="o">.</span><span class="n">datetime</span><span class="o">.</span><span class="n">now</span><span class="p">())</span>
+
+<div class="viewcode-block" id="DocMaker.get_buffer"><a class="viewcode-back" href="../../code.html#great.doc_maker.DocMaker.get_buffer">[docs]</a>    <span class="k">def</span> <span class="nf">get_buffer</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">sio</span><span class="o">.</span><span class="n">getvalue</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="DocMaker.print_buffer"><a class="viewcode-back" href="../../code.html#great.doc_maker.DocMaker.print_buffer">[docs]</a>    <span class="k">def</span> <span class="nf">print_buffer</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="nb">print</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">get_buffer</span><span class="p">())</span></div>
+
+<div class="viewcode-block" id="DocMaker.display_buffer"><a class="viewcode-back" href="../../code.html#great.doc_maker.DocMaker.display_buffer">[docs]</a>    <span class="k">def</span> <span class="nf">display_buffer</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">display</span><span class="p">(</span><span class="n">Markdown</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">get_buffer</span><span class="p">()))</span></div>
+
+<div class="viewcode-block" id="DocMaker.include_source"><a class="viewcode-back" href="../../code.html#great.doc_maker.DocMaker.include_source">[docs]</a>    <span class="k">def</span> <span class="nf">include_source</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">file_name</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        file_name = name of ipynb file without the extension</span>
+
+<span class="sd">        :param file_name:</span>
+<span class="sd">        :return:</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">text</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;&#39;&#39;</span>
+
+<span class="se">\\</span><span class="s1">clearpage</span>
+
+<span class="se">\\</span><span class="s1">scriptsize</span>
+
+<span class="s1">```python</span>
+
+<span class="s1">@@@include code/</span><span class="si">{</span><span class="n">file_name</span><span class="si">}</span><span class="s1">.py</span>
+
+<span class="s1">```</span>
+
+<span class="se">\\</span><span class="s1">normalsize</span>
+
+<span class="s1">&#39;&#39;&#39;</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="DocMaker.write_markdown"><a class="viewcode-back" href="../../code.html#great.doc_maker.DocMaker.write_markdown">[docs]</a>    <span class="k">def</span> <span class="nf">write_markdown</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">font_size</span><span class="o">=</span><span class="mi">12</span><span class="p">,</span> <span class="n">margin</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">show</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        persist and write out the StringIO cache to a physical file</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">to_format</span> <span class="o">==</span> <span class="s1">&#39;latex&#39;</span><span class="p">:</span>
+            <span class="n">yaml</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">__yaml_doc__</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                <span class="n">title</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">title</span><span class="p">,</span> <span class="n">created</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_date_</span><span class="p">(),</span>
+                <span class="n">font_size</span><span class="o">=</span><span class="n">font_size</span><span class="p">,</span> <span class="n">margin</span><span class="o">=</span><span class="n">margin</span><span class="p">,</span>
+                <span class="n">number_sections</span><span class="o">=</span><span class="s2">&quot;true&quot;</span><span class="p">,</span> <span class="n">link_citations</span><span class="o">=</span><span class="s2">&quot;true&quot;</span><span class="p">,</span>
+                <span class="n">to_format</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">to_format</span><span class="p">,</span> <span class="n">file_format</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">file_format</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">to_format</span> <span class="o">==</span> <span class="s1">&#39;beamer&#39;</span><span class="p">:</span>
+            <span class="n">yaml</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">__yaml_beamer__</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                <span class="n">title</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">title</span><span class="p">,</span> <span class="n">created</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_date_</span><span class="p">(),</span>
+                <span class="n">font_size</span><span class="o">=</span><span class="n">font_size</span><span class="p">,</span>
+                <span class="n">number_sections</span><span class="o">=</span><span class="s2">&quot;true&quot;</span><span class="p">,</span> <span class="n">link_citations</span><span class="o">=</span><span class="s2">&quot;true&quot;</span><span class="p">,</span>
+                <span class="n">to_format</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">to_format</span><span class="p">,</span> <span class="n">file_format</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">file_format</span><span class="p">)</span>
+
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">file</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="s1">&#39;w&#39;</span><span class="p">,</span> <span class="n">encoding</span><span class="o">=</span><span class="s1">&#39;UTF-8&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+            <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">yaml</span><span class="p">)</span>
+            <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">sio</span><span class="o">.</span><span class="n">getvalue</span><span class="p">())</span>
+
+        <span class="k">if</span> <span class="n">show</span><span class="p">:</span>
+            <span class="n">display</span><span class="p">(</span><span class="n">Markdown</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">file</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="s1">&#39;r&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">read</span><span class="p">()))</span></div>
+
+<div class="viewcode-block" id="DocMaker.process"><a class="viewcode-back" href="../../code.html#great.doc_maker.DocMaker.process">[docs]</a>    <span class="k">def</span> <span class="nf">process</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">font_size</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">margin</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">over_write</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Write out and run pandoc to convert</span>
+<span class="sd">        Can set font_size and margin here, default 10 and 1 inches.</span>
+
+<span class="sd">        Set over_write = False and an existing markdown file will not be overwritten.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># need to CD into appropriate directory</span>
+        <span class="c1"># do NOT overwrite if just using to create the exhibits and you are happy with the md &quot;holder&quot;</span>
+        <span class="c1"># file</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_off</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;Currently in OFF mode...returning&#39;</span><span class="p">)</span>
+            <span class="k">return</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">file</span><span class="o">.</span><span class="n">exists</span><span class="p">()</span> <span class="o">==</span> <span class="kc">False</span> <span class="ow">or</span> <span class="n">over_write</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">write_markdown</span><span class="p">(</span><span class="n">font_size</span><span class="p">,</span> <span class="n">margin</span><span class="p">)</span>
+        <span class="n">cwd</span> <span class="o">=</span> <span class="n">Path</span><span class="o">.</span><span class="n">cwd</span><span class="p">()</span>
+        <span class="nb">print</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">file</span><span class="p">))</span>
+        <span class="n">os</span><span class="o">.</span><span class="n">chdir</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">file</span><span class="o">.</span><span class="n">parent</span><span class="p">)</span>
+        <span class="n">markdown_make_main</span><span class="p">(</span><span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">file</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">file</span><span class="o">.</span><span class="n">stem</span><span class="p">))</span>
+        <span class="n">os</span><span class="o">.</span><span class="n">chdir</span><span class="p">(</span><span class="n">cwd</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="DocMaker.write"><a class="viewcode-back" href="../../code.html#great.doc_maker.DocMaker.write">[docs]</a>    <span class="k">def</span> <span class="nf">write</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">txtv</span><span class="p">,</span> <span class="n">connector</span><span class="o">=</span><span class="s1">&#39; &#39;</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        add stuff and return it to get into console</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sio</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">connector</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="nb">str</span><span class="p">(</span><span class="n">i</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">txtv</span><span class="p">]))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sio</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s1">&#39;</span><span class="se">\n\n</span><span class="s1">&#39;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">txtv</span></div>
+
+<div class="viewcode-block" id="DocMaker.text"><a class="viewcode-back" href="../../code.html#great.doc_maker.DocMaker.text">[docs]</a>    <span class="k">def</span> <span class="nf">text</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">txt</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        just add text</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sio</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">txt</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sio</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s1">&#39;</span><span class="se">\n\n</span><span class="s1">&#39;</span><span class="p">)</span>
+        <span class="n">display</span><span class="p">(</span><span class="n">Markdown</span><span class="p">(</span><span class="n">txt</span><span class="p">))</span></div>
+
+<div class="viewcode-block" id="DocMaker.section"><a class="viewcode-back" href="../../code.html#great.doc_maker.DocMaker.section">[docs]</a>    <span class="k">def</span> <span class="nf">section</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">txt</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sio</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;# </span><span class="si">{</span><span class="n">txt</span><span class="si">}</span><span class="se">\n\n</span><span class="s1">&#39;</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="DocMaker.subsection"><a class="viewcode-back" href="../../code.html#great.doc_maker.DocMaker.subsection">[docs]</a>    <span class="k">def</span> <span class="nf">subsection</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">txt</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sio</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;## </span><span class="si">{</span><span class="n">txt</span><span class="si">}</span><span class="se">\n\n</span><span class="s1">&#39;</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="DocMaker.figure"><a class="viewcode-back" href="../../code.html#great.doc_maker.DocMaker.figure">[docs]</a>    <span class="k">def</span> <span class="nf">figure</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">f</span><span class="p">,</span> <span class="n">label</span><span class="p">,</span> <span class="n">caption</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="n">new_slide</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        add a figure</span>
+<span class="sd">        if f is a Figure it is used directly</span>
+<span class="sd">        else call .get_figure</span>
+<span class="sd">        else ValueError</span>
+<span class="sd">        label = used for filename too</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_off</span><span class="p">:</span> <span class="k">return</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">f</span><span class="p">,</span> <span class="n">Figure</span><span class="p">):</span>
+            <span class="k">pass</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">f</span> <span class="o">=</span> <span class="n">f</span><span class="o">.</span><span class="n">get_figure</span><span class="p">()</span>
+            <span class="k">except</span> <span class="n">AttritbuteError</span> <span class="k">as</span> <span class="n">ae</span><span class="p">:</span>
+                <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;Cannot coerce input object </span><span class="si">{</span><span class="n">f</span><span class="si">}</span><span class="s1"> into a figure...ignoring&#39;</span><span class="p">)</span>
+                <span class="k">raise</span> <span class="n">ae</span>
+
+        <span class="c1"># do not want the prefix to be used in the file name, just the internal label</span>
+        <span class="n">slide_caption</span> <span class="o">=</span> <span class="n">label</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s1">&#39;-&#39;</span><span class="p">,</span> <span class="s1">&#39; &#39;</span><span class="p">)</span>
+        <span class="n">label</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">make_unique</span><span class="p">(</span><span class="n">label</span><span class="p">)</span>
+        <span class="n">fig_file</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">figure_dir</span> <span class="o">/</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">key</span><span class="si">}</span><span class="s1">-</span><span class="si">{</span><span class="n">label</span><span class="si">}</span><span class="s1">.</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">fig_format</span><span class="si">}</span><span class="s1">&#39;</span>
+        <span class="n">fig_file_local</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;img/</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">key</span><span class="si">}</span><span class="s1">-</span><span class="si">{</span><span class="n">label</span><span class="si">}</span><span class="s1">.</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">fig_format</span><span class="si">}</span><span class="s1">&#39;</span>
+        <span class="n">f</span><span class="o">.</span><span class="n">savefig</span><span class="p">(</span><span class="n">fig_file</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="n">label</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">label_prefix</span><span class="si">}{</span><span class="n">label</span><span class="si">}</span><span class="s1">&#39;</span>
+
+        <span class="c1"># clean label</span>
+        <span class="n">slide_caption</span> <span class="o">=</span> <span class="n">make_title</span><span class="p">(</span><span class="n">label</span><span class="p">)</span>
+        <span class="n">label</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">clean_name</span><span class="p">(</span><span class="n">label</span><span class="p">)</span>
+
+        <span class="c1"># not the caption, that can contain tex</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">escaped_</span><span class="p">(</span><span class="n">caption</span><span class="p">):</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s1">&#39;Caption contains unescaped underscores _. You must ensure they are in dollars.&#39;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">caption</span> <span class="o">!=</span> <span class="s1">&#39;&#39;</span><span class="p">:</span>
+            <span class="n">fig_text</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;![</span><span class="si">{</span><span class="n">caption</span><span class="si">}</span><span class="s1"> &#39;</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">fig_text</span> <span class="o">=</span> <span class="s1">&#39;![&#39;</span>
+        <span class="k">if</span> <span class="n">label</span> <span class="o">!=</span> <span class="s1">&#39;&#39;</span><span class="p">:</span>
+            <span class="n">fig_text</span> <span class="o">+=</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="se">\\</span><span class="s1">label</span><span class="se">{{</span><span class="s1">fig:</span><span class="si">{</span><span class="n">label</span><span class="si">}</span><span class="se">}}</span><span class="s1">&#39;</span>
+        <span class="n">fig_text</span> <span class="o">+=</span> <span class="sa">f</span><span class="s1">&#39;](</span><span class="si">{</span><span class="n">fig_file_local</span><span class="si">}</span><span class="s1">)&#39;</span>
+        <span class="k">if</span> <span class="n">size</span> <span class="o">!=</span> <span class="s1">&#39;&#39;</span><span class="p">:</span>
+            <span class="n">fig_text</span> <span class="o">+=</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="se">{{</span><span class="si">{</span><span class="n">size</span><span class="si">}</span><span class="se">}}</span><span class="s1">&#39;</span>
+        <span class="k">if</span> <span class="n">caption</span> <span class="o">==</span> <span class="s1">&#39;&#39;</span><span class="p">:</span>
+            <span class="c1"># suppresses &quot;Figure&quot; in pandoc</span>
+            <span class="c1"># https://stackoverflow.com/questions/45030895/how-to-add-an-image-with-alt-tag-but-without-caption-in-pandoc</span>
+            <span class="n">fig_text</span> <span class="o">+=</span> <span class="s1">&#39;  </span><span class="se">\\</span><span class="s1">&#39;</span>
+        <span class="n">fig_text</span> <span class="o">+=</span> <span class="s1">&#39;</span><span class="se">\n\n</span><span class="s1">&#39;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">to_format</span> <span class="o">==</span> <span class="s1">&#39;beamer&#39;</span> <span class="ow">and</span> <span class="n">new_slide</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">sio</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;## </span><span class="si">{</span><span class="n">slide_caption</span><span class="si">}</span><span class="se">\n\n</span><span class="s1">&#39;</span><span class="p">)</span>
+            <span class="n">display</span><span class="p">(</span><span class="n">Markdown</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;## </span><span class="si">{</span><span class="n">slide_caption</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sio</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">fig_text</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="DocMaker.wide_table"><a class="viewcode-back" href="../../code.html#great.doc_maker.DocMaker.wide_table">[docs]</a>    <span class="k">def</span> <span class="nf">wide_table</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">df</span><span class="p">,</span> <span class="n">label</span><span class="p">,</span> <span class="n">caption</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="n">nparts</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+              <span class="n">float_format</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">fill_nan</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="p">,</span>
+              <span class="n">here</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="p">,</span> <span class="n">font_size</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="p">,</span> <span class="n">custom_font_size</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
+              <span class="n">sparsify</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">force_float</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">output_style</span><span class="o">=</span><span class="s1">&#39;default&#39;</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        ``nparts`` = split the table into nparts</span>
+
+<span class="sd">        Splits df and passes to table to do the work.</span>
+
+<span class="sd">        **Large Tables**</span>
+
+<span class="sd">        Makes some attempt to split up very large tables</span>
+
+<span class="sd">        Example</span>
+
+<span class="sd">        .. code-block:: python</span>
+<span class="sd">            :linenos:</span>
+
+<span class="sd">            import great as grt</span>
+
+<span class="sd">            DM = grt.DocMaker(f&#39;notes\\dm.md&#39;,</span>
+<span class="sd">                  key=f&#39;dm-test&#39;,</span>
+<span class="sd">                  title=f&quot;Test of DocMaker&quot;,</span>
+<span class="sd">                  tidy=True, back_up=True)</span>
+
+<span class="sd">            t = grt.test_df(10, 20)</span>
+<span class="sd">            DM.table(t, &#39;all-in-one&#39;, &#39;Trying to put the whole thing togeher. &#39;)</span>
+<span class="sd">            DM.wide_table(t, &#39;wide-table&#39;, &#39;Splitting into 3 parts. &#39;, nparts=3)</span>
+<span class="sd">            DM.process(12, 1)</span>
+
+<span class="sd">        or in TeX:</span>
+
+<span class="sd">        .. code-block::</span>
+<span class="sd">            :linenos:</span>
+
+<span class="sd">            \\begin{sidewaystable}</span>
+<span class="sd">             \\caption{Table One}\\label{tab:one}</span>
+<span class="sd">             \\centering</span>
+<span class="sd">             \\begin{tabular}{*{4}{c}} \\toprule</span>
+<span class="sd">               Table Head &amp; Table Head &amp; Table Head &amp; Table Head \\\\ \\midrule</span>
+<span class="sd">               Some Values &amp; Some Values &amp; Some Values &amp; Some Values \\\\</span>
+<span class="sd">               Some Values &amp; Some Values &amp; Some Values &amp; Some Values \\\\</span>
+<span class="sd">               Some Values &amp; Some Values &amp; Some Values &amp; Some Values \\\\</span>
+<span class="sd">               Some Values &amp; Some Values &amp; Some Values &amp; Some Values \\\\ \\bottomrule</span>
+<span class="sd">             \\end{tabular}</span>
+
+<span class="sd">            \\vspace{2\\baselineskip}</span>
+<span class="sd">            \\caption{Table Two}\\label{tab:two}</span>
+<span class="sd">             \\centering</span>
+<span class="sd">             \\begin{tabular}{*{4}{c}} \\toprule</span>
+<span class="sd">               Table Head &amp; Table Head &amp; Table Head &amp; Table Head \\\\ \\midrule</span>
+<span class="sd">               Some Values &amp; Some Values &amp; Some Values &amp; Some Values \\\\</span>
+<span class="sd">               Some Values &amp; Some Values &amp; Some Values &amp; Some Values \\\\</span>
+<span class="sd">               Some Values &amp; Some Values &amp; Some Values &amp; Some Values \\\\</span>
+<span class="sd">               Some Values &amp; Some Values &amp; Some Values &amp; Some Values \\\\ \\bottomrule</span>
+<span class="sd">             \\end{tabular}</span>
+<span class="sd">            \\end{sidewaystable}</span>
+
+
+<span class="sd">        :return:</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="n">cols</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+        <span class="n">cols_per_part</span> <span class="o">=</span> <span class="n">cols</span> <span class="o">//</span> <span class="n">nparts</span>
+        <span class="k">if</span> <span class="n">nparts</span> <span class="o">*</span> <span class="n">cols_per_part</span> <span class="o">&lt;</span> <span class="n">cols</span><span class="p">:</span>
+            <span class="n">cols_per_part</span> <span class="o">+=</span> <span class="mi">1</span>
+
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">b</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">cols</span><span class="p">,</span> <span class="n">cols_per_part</span><span class="p">)):</span>
+            <span class="n">bit</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">iloc</span><span class="p">[:,</span> <span class="n">b</span><span class="p">:</span><span class="n">b</span> <span class="o">+</span> <span class="n">cols_per_part</span><span class="p">]</span>
+            <span class="n">lbl</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">label_prefix</span><span class="si">}{</span><span class="n">label</span><span class="si">}</span><span class="s1">&#39;</span>
+            <span class="k">if</span> <span class="n">i</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="n">c</span> <span class="o">=</span><span class="s1">&#39;&#39;</span> <span class="c1">#  f&quot;Table {label.replace(&#39;-&#39;, &#39; &#39;)}&quot;</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">c</span> <span class="o">=</span> <span class="s1">&#39;&#39;</span>
+            <span class="c1"># if i == 0:</span>
+            <span class="c1">#     c = f&quot;{caption} Part {i+1} of {nparts}.&quot;</span>
+            <span class="c1"># else:</span>
+            <span class="c1">#     c = f&quot;Table {label.replace(&#39;-&#39;, &#39; &#39;)} continued, part {i+1} of {nparts}&quot;</span>
+            <span class="n">display</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">table</span><span class="p">(</span><span class="n">bit</span><span class="p">,</span> <span class="n">lbl</span><span class="p">,</span>
+                        <span class="n">caption</span><span class="o">=</span><span class="n">c</span><span class="p">,</span>
+                        <span class="n">float_format</span><span class="o">=</span><span class="n">float_format</span><span class="p">,</span> <span class="n">fill_nan</span><span class="o">=</span><span class="n">fill_nan</span><span class="p">,</span>
+                        <span class="n">here</span><span class="o">=</span><span class="n">here</span><span class="p">,</span> <span class="n">font_size</span><span class="o">=</span><span class="n">font_size</span><span class="p">,</span> <span class="n">sideways</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">to_format</span><span class="o">==</span><span class="s1">&#39;latex&#39;</span><span class="p">,</span>
+                        <span class="n">custom_font_size</span><span class="o">=</span><span class="n">custom_font_size</span><span class="p">,</span> <span class="n">multipart</span><span class="o">=</span><span class="n">i</span><span class="p">,</span>
+                        <span class="n">sparsify</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">force_float</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">output_style</span><span class="o">=</span><span class="s1">&#39;with_table&#39;</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+                     <span class="p">)</span></div>
+
+<div class="viewcode-block" id="DocMaker.table"><a class="viewcode-back" href="../../code.html#great.doc_maker.DocMaker.table">[docs]</a>    <span class="k">def</span> <span class="nf">table</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">df</span><span class="p">,</span> <span class="n">label</span><span class="p">,</span> <span class="n">caption</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">,</span>
+              <span class="n">float_format</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">fill_nan</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="p">,</span>
+              <span class="n">here</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="p">,</span> <span class="n">font_size</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="p">,</span> <span class="n">sideways</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">custom_font_size</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
+              <span class="n">sparsify</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">force_float</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">output_style</span><span class="o">=</span><span class="s1">&#39;default&#39;</span><span class="p">,</span>
+              <span class="n">multipart</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">new_slide</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Add a table</span>
+<span class="sd">        label used as file name</span>
+<span class="sd">        stuff table in clipboard latex table, save to file...add caption, labels etc.</span>
+<span class="sd">        rational formatting</span>
+
+<span class="sd">        force_float = convert input to float first (makes a copy) for col alignment::</span>
+
+<span class="sd">            def sticb(self, df, float_format=None, fill_nan=&#39;&#39;, caption=&#39;caption&#39;, label=&#39;label&#39;,</span>
+<span class="sd">            file_name=&#39;&#39;, here=&#39;&#39;, font_size=False, sideways=False, sparsify=False, **kwargs)</span>
+
+<span class="sd">        args passed to pandas to_latex</span>
+<span class="sd">        From CEA project and Monograph SRM_Examples</span>
+
+<span class="sd">        ``output_style``</span>
+
+<span class="sd">        #.  with_table : all output in @@@ file and include in main md file; use when caption is generic</span>
+<span class="sd">        #.  caption:   puts caption text in the main markdown file, use when caption will be edited</span>
+<span class="sd">        #.  inline: all output in md file directly (not recommended)</span>
+
+<span class="sd">        font_size = scriptsize, footnotesize etc.</span>
+
+<span class="sd">        label and columns have _ escaped for TeX but the caption is not - so beware!</span>
+
+<span class="sd">        multipart=True for widetable, then skip the beamer caption</span>
+
+<span class="sd">        Test Cases</span>
+
+<span class="sd">        .. code-block:: python</span>
+<span class="sd">            :emphasize-lines: 3,5</span>
+<span class="sd">            :linenos:</span>
+
+<span class="sd">            import great as grt</span>
+<span class="sd">            from great.doc_maker import DocMaker</span>
+<span class="sd">            df = grt.test_df()</span>
+
+<span class="sd">            DM = doc.DocMaker(f&#39;notes\\vig-n-tester-example.md&#39;,</span>
+<span class="sd">                              key=f&#39;vig-n&#39;,</span>
+<span class="sd">                              title=&#39;All Different Table Options&#39;,</span>
+<span class="sd">                              tidy=True)</span>
+
+<span class="sd">            DM.text(&#39;Writing test examples of all combinations to file. &#39;)</span>
+<span class="sd">            j = 0</span>
+<span class="sd">            sideways = False</span>
+<span class="sd">            for fs in [&#39;normalsize&#39;, &#39;footnotesize&#39;, &#39;scriptsize&#39;, &#39;tiny&#39;]:</span>
+<span class="sd">                for output_style in [&#39;with_table&#39;, &#39;inline&#39;, &#39;caption&#39;]:</span>
+<span class="sd">                    j += 1</span>
+<span class="sd">                    DM.table(df, f&#39;test-{j}&#39;,</span>
+<span class="sd">                             f&#39;Caption 1 with settings font-size={fs}, sideways={sideways},</span>
+<span class="sd">                             output-style={output_style.replace(&quot;_&quot;, &quot;-&quot;)}&#39;,</span>
+<span class="sd">                             font_size=fs, sideways=sideways, output_style=output_style)</span>
+
+<span class="sd">            sideways = True</span>
+<span class="sd">            df = grt.test_df(ncols=20)</span>
+
+<span class="sd">            # reveals there is  no tiny!</span>
+<span class="sd">            for fs in [&#39;normalsize&#39;, &#39;footnotesize&#39;, &#39;scriptsize&#39;, &#39;tiny&#39;]:</span>
+<span class="sd">                j += 1</span>
+<span class="sd">                DM.table(df, f&#39;test-{j}&#39;,</span>
+<span class="sd">                         f&#39;Caption 1 with settings font-size={fs}, sideways={sideways}&#39;,</span>
+<span class="sd">                         font_size=fs, sideways=sideways)</span>
+
+
+<span class="sd">            DM.process()</span>
+
+
+<span class="sd">        :param df:</span>
+<span class="sd">        :param label:</span>
+<span class="sd">        :param caption:</span>
+<span class="sd">        :param float_format:</span>
+<span class="sd">        :param fill_nan:</span>
+<span class="sd">        :param here:</span>
+<span class="sd">        :param font_size:</span>
+<span class="sd">        :param custom_font_size:  e.g.  input the size 0.15, second size will be scaled up appropriately.</span>
+<span class="sd">          Overrides font_size. \\fontsize{0.15cm}{0.170cm}\\selectfont</span>
+<span class="sd">        :param sideways:</span>
+<span class="sd">        :param sparsify:</span>
+<span class="sd">        :param force_float:</span>
+<span class="sd">        :param output_style: Can be None (default) or first, mid, last.</span>
+<span class="sd">        :param kwargs:</span>
+<span class="sd">        :return:</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_off</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">df</span>
+
+        <span class="c1"># make some sensible choices: this is not really helpful...too much like driver assist</span>
+        <span class="c1"># ncols = len(df.columns)</span>
+        <span class="c1"># if ncols &gt;= 12:</span>
+        <span class="c1">#     sideways = True</span>
+        <span class="c1"># do not try to guess font size...just input it sensibly!</span>
+
+        <span class="k">if</span> <span class="n">output_style</span> <span class="o">==</span> <span class="s1">&#39;default&#39;</span><span class="p">:</span>
+            <span class="n">output_style</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">output_style</span>
+
+        <span class="c1"># will want a much better approach!</span>
+
+        <span class="k">if</span> <span class="n">float_format</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">float_format</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">default_float_fmt</span>
+
+        <span class="n">df</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">force_float</span><span class="p">:</span>
+            <span class="n">df</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">float</span><span class="p">,</span> <span class="n">errors</span><span class="o">=</span><span class="s1">&#39;ignore&#39;</span><span class="p">)</span>
+
+        <span class="c1"># have to handle column names that may include _</span>
+        <span class="c1"># For now assume there are not TeX names</span>
+        <span class="n">slide_caption</span> <span class="o">=</span> <span class="n">make_title</span><span class="p">(</span><span class="n">label</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">multipart</span><span class="p">:</span>
+            <span class="n">label</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">make_unique</span><span class="p">(</span><span class="n">label</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">multipart</span><span class="p">))</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">label</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">make_unique</span><span class="p">(</span><span class="n">label</span><span class="p">)</span>
+        <span class="n">label_fn</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">clean_name</span><span class="p">(</span><span class="n">label</span><span class="p">)</span>
+        <span class="n">label</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">label_prefix</span><span class="si">}{</span><span class="n">label_fn</span><span class="si">}</span><span class="s1">&#39;</span>
+
+        <span class="c1"># not the caption, that can contain tex</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">escaped_</span><span class="p">(</span><span class="n">caption</span><span class="p">):</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s1">&#39;Caption contains unescaped underscores _. You must ensure they are in dollars.&#39;</span><span class="p">)</span>
+
+        <span class="n">df</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">clean_index</span><span class="p">(</span><span class="n">df</span><span class="p">)</span>
+
+        <span class="n">s</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">to_latex</span><span class="p">(</span><span class="n">float_format</span><span class="o">=</span><span class="n">float_format</span><span class="p">,</span> <span class="n">sparsify</span><span class="o">=</span><span class="n">sparsify</span><span class="p">,</span> <span class="n">escape</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="n">s</span> <span class="o">=</span> <span class="n">s</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s1">&#39;nan&#39;</span><span class="p">,</span> <span class="n">fill_nan</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">here</span><span class="p">:</span>
+            <span class="n">here</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;[</span><span class="si">{</span><span class="n">here</span><span class="si">}</span><span class="s1">]&#39;</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">here</span> <span class="o">=</span> <span class="s1">&#39;&#39;</span>
+        <span class="k">if</span> <span class="n">font_size</span> <span class="o">!=</span> <span class="s1">&#39;&#39;</span><span class="p">:</span>
+            <span class="n">font_size</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="se">\\</span><span class="si">{</span><span class="n">font_size</span><span class="si">}</span><span class="se">\n</span><span class="s1">&#39;</span>
+            <span class="n">ends_font_size</span> <span class="o">=</span> <span class="s1">&#39;</span><span class="se">\\</span><span class="s1">normalsize</span><span class="se">\n</span><span class="s1">&#39;</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">ends_font_size</span> <span class="o">=</span> <span class="s1">&#39;&#39;</span>
+        <span class="k">if</span> <span class="n">custom_font_size</span><span class="p">:</span>
+            <span class="n">font_size</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="se">\\</span><span class="s1">fontsize</span><span class="se">{{</span><span class="si">{</span><span class="n">custom_font_size</span><span class="si">}</span><span class="s1">cm</span><span class="se">}}{{</span><span class="si">{</span><span class="n">custom_font_size</span><span class="si">}</span><span class="s1">cm</span><span class="se">}}\\</span><span class="s1">selectfont</span><span class="se">\n</span><span class="s1">&#39;</span>
+            <span class="n">ends_font_size</span> <span class="o">=</span> <span class="s1">&#39;</span><span class="se">\\</span><span class="s1">normalsize</span><span class="se">\n</span><span class="s1">&#39;</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">default_table_font_size</span><span class="p">:</span>
+            <span class="n">font_size</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="se">\\</span><span class="s1">fontsize</span><span class="se">{{</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">default_table_font_size</span><span class="si">}</span><span class="s1">cm</span><span class="se">}}{{</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">default_table_font_size</span><span class="si">}</span><span class="s1">cm</span><span class="se">}}\\</span><span class="s1">selectfont</span><span class="se">\n</span><span class="s1">&#39;</span>
+            <span class="n">ends_font_size</span> <span class="o">=</span> <span class="s1">&#39;</span><span class="se">\\</span><span class="s1">normalsize</span><span class="se">\n</span><span class="s1">&#39;</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">ends_font_size</span> <span class="o">=</span> <span class="s1">&#39;&#39;</span>
+
+        <span class="c1"># table type</span>
+        <span class="k">if</span> <span class="n">sideways</span><span class="p">:</span>
+            <span class="n">tt</span> <span class="o">=</span> <span class="s1">&#39;sidewaystable&#39;</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">tt</span> <span class="o">=</span> <span class="s1">&#39;table&#39;</span>
+
+        <span class="n">s_md_pre</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="se">\n\\</span><span class="s1">begin</span><span class="se">{{</span><span class="si">{</span><span class="n">tt</span><span class="si">}</span><span class="se">}}</span><span class="si">{</span><span class="n">here</span><span class="si">}</span><span class="se">\n</span><span class="si">{</span><span class="n">font_size</span><span class="si">}</span><span class="s1"> %</span><span class="se">\n</span><span class="s1">&#39;</span>
+        <span class="k">if</span> <span class="n">caption</span> <span class="o">!=</span> <span class="s1">&#39;&#39;</span><span class="p">:</span>
+            <span class="n">s_md_pre</span> <span class="o">+=</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="se">\\</span><span class="s1">caption</span><span class="se">{{</span><span class="si">{</span><span class="n">caption</span><span class="si">}</span><span class="se">}}\n</span><span class="s1">&#39;</span>
+        <span class="k">if</span> <span class="n">label</span> <span class="o">!=</span> <span class="s1">&#39;&#39;</span><span class="p">:</span>
+            <span class="n">s_md_pre</span> <span class="o">+=</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="se">\\</span><span class="s1">label</span><span class="se">{{</span><span class="s1">tab:</span><span class="si">{</span><span class="n">label</span><span class="si">}</span><span class="se">}}\n</span><span class="s1">&#39;</span>
+
+        <span class="n">s_table</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="se">\\</span><span class="s1">medskip</span><span class="se">\n\\</span><span class="s1">centering</span><span class="se">\n</span><span class="si">{</span><span class="n">s</span><span class="si">}</span><span class="s1">&#39;</span>
+        <span class="n">s_md_post</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">ends_font_size</span><span class="si">}</span><span class="se">\\</span><span class="s1">end</span><span class="se">{{</span><span class="si">{</span><span class="n">tt</span><span class="si">}</span><span class="se">}}\n\n</span><span class="s1">&#39;</span>
+
+        <span class="n">table_file</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">table_dir</span> <span class="o">/</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">key</span><span class="si">}</span><span class="s1">-</span><span class="si">{</span><span class="n">label_fn</span><span class="si">}</span><span class="s1">.md&#39;</span>
+        <span class="n">table_file_local</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">table_dir_name</span><span class="si">}</span><span class="s1">/</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">key</span><span class="si">}</span><span class="s1">-</span><span class="si">{</span><span class="n">label_fn</span><span class="si">}</span><span class="s1">.md&#39;</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">multipart</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">to_format</span> <span class="o">==</span> <span class="s1">&#39;beamer&#39;</span> <span class="ow">and</span> <span class="n">new_slide</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">sio</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;## </span><span class="si">{</span><span class="n">slide_caption</span><span class="si">}</span><span class="se">\n\n</span><span class="s1">&#39;</span><span class="p">)</span>
+            <span class="n">display</span><span class="p">(</span><span class="n">Markdown</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;## </span><span class="si">{</span><span class="n">slide_caption</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">))</span>
+
+        <span class="k">if</span> <span class="n">output_style</span> <span class="o">==</span> <span class="s1">&#39;caption&#39;</span><span class="p">:</span>
+            <span class="k">with</span> <span class="n">table_file</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="s1">&#39;w&#39;</span><span class="p">,</span> <span class="n">encoding</span><span class="o">=</span><span class="s1">&#39;utf-8&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+                <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s1">&#39;</span><span class="se">\n</span><span class="s1">&#39;</span><span class="p">)</span>
+                <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">s_table</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">sio</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">s_md_pre</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">sio</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;</span><span class="se">\n</span><span class="s1">@@@include </span><span class="si">{</span><span class="n">table_file_local</span><span class="si">}</span><span class="se">\n\n</span><span class="s1">&#39;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">sio</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">s_md_post</span><span class="p">)</span>
+
+        <span class="k">elif</span> <span class="p">(</span><span class="n">output_style</span> <span class="o">==</span> <span class="s1">&#39;inline&#39;</span><span class="p">)</span> <span class="ow">or</span> <span class="p">(</span><span class="n">output_style</span> <span class="o">==</span> <span class="s1">&#39;in-line&#39;</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">sio</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">s_md_pre</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">sio</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">s_table</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">sio</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">s_md_post</span><span class="p">)</span>
+
+        <span class="k">elif</span> <span class="n">output_style</span> <span class="o">==</span> <span class="s1">&#39;with_table&#39;</span><span class="p">:</span>
+            <span class="k">with</span> <span class="n">table_file</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="s1">&#39;w&#39;</span><span class="p">,</span> <span class="n">encoding</span><span class="o">=</span><span class="s1">&#39;utf-8&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+                <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">s_md_pre</span><span class="p">)</span>
+                <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">s_table</span><span class="p">)</span>
+                <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">s_md_post</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">sio</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;@@@include </span><span class="si">{</span><span class="n">table_file_local</span><span class="si">}</span><span class="se">\n\n</span><span class="s1">&#39;</span><span class="p">)</span>
+
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;Unknown option </span><span class="si">{</span><span class="n">output_style</span><span class="si">}</span><span class="s1"> for output_style passed to table.&#39;</span><span class="p">)</span>
+
+        <span class="n">display</span><span class="p">(</span><span class="n">df</span><span class="o">.</span><span class="n">style</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">float_format</span><span class="p">))</span></div>
+
+<div class="viewcode-block" id="DocMaker.clean_name"><a class="viewcode-back" href="../../code.html#great.doc_maker.DocMaker.clean_name">[docs]</a>    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">clean_name</span><span class="p">(</span><span class="n">n</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        escape underscores</span>
+
+<span class="sd">        :param n:</span>
+<span class="sd">        :return:</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="n">n</span><span class="p">)</span> <span class="o">==</span> <span class="nb">str</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">n</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s1">&#39;_&#39;</span><span class="p">,</span> <span class="sa">r</span><span class="s1">&#39;\_&#39;</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">n</span>
+        <span class="k">except</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">n</span></div>
+
+<div class="viewcode-block" id="DocMaker.escaped_"><a class="viewcode-back" href="../../code.html#great.doc_maker.DocMaker.escaped_">[docs]</a>    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">escaped_</span><span class="p">(</span><span class="n">s</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        check s for unescaped _s</span>
+<span class="sd">        returns true if all _ escaped else false</span>
+<span class="sd">        :param s:</span>
+<span class="sd">        :return:</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">all</span><span class="p">([</span><span class="n">s</span><span class="p">[</span><span class="n">x</span><span class="o">.</span><span class="n">start</span><span class="p">()</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="s1">&#39;</span><span class="se">\\</span><span class="s1">&#39;</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">re</span><span class="o">.</span><span class="n">finditer</span><span class="p">(</span><span class="s1">&#39;_&#39;</span><span class="p">,</span> <span class="n">s</span><span class="p">)])</span></div>
+
+<div class="viewcode-block" id="DocMaker.clean_index"><a class="viewcode-back" href="../../code.html#great.doc_maker.DocMaker.clean_index">[docs]</a>    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">clean_index</span><span class="p">(</span><span class="n">df</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        escape _ for columns and index</span>
+<span class="sd">        whether multi or not</span>
+
+<span class="sd">        !!! you can do this with a renamer...</span>
+
+<span class="sd">        :param df:</span>
+<span class="sd">        :return:</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># columns</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">df</span><span class="o">.</span><span class="n">columns</span><span class="p">,</span> <span class="n">pd</span><span class="o">.</span><span class="n">core</span><span class="o">.</span><span class="n">indexes</span><span class="o">.</span><span class="n">multi</span><span class="o">.</span><span class="n">MultiIndex</span><span class="p">):</span>
+            <span class="n">df</span><span class="o">.</span><span class="n">columns</span> <span class="o">=</span> <span class="n">DocMaker</span><span class="o">.</span><span class="n">clean_mindex_work</span><span class="p">(</span><span class="n">df</span><span class="o">.</span><span class="n">columns</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">df</span><span class="o">.</span><span class="n">columns</span> <span class="o">=</span> <span class="nb">map</span><span class="p">(</span><span class="n">DocMaker</span><span class="o">.</span><span class="n">clean_name</span><span class="p">,</span> <span class="n">df</span><span class="o">.</span><span class="n">columns</span><span class="p">)</span>
+
+        <span class="c1"># index</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">df</span><span class="o">.</span><span class="n">index</span><span class="p">,</span> <span class="n">pd</span><span class="o">.</span><span class="n">core</span><span class="o">.</span><span class="n">indexes</span><span class="o">.</span><span class="n">multi</span><span class="o">.</span><span class="n">MultiIndex</span><span class="p">):</span>
+            <span class="n">df</span><span class="o">.</span><span class="n">index</span> <span class="o">=</span> <span class="n">DocMaker</span><span class="o">.</span><span class="n">clean_mindex_work</span><span class="p">(</span><span class="n">df</span><span class="o">.</span><span class="n">index</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">df</span><span class="o">.</span><span class="n">index</span> <span class="o">=</span> <span class="nb">map</span><span class="p">(</span><span class="n">DocMaker</span><span class="o">.</span><span class="n">clean_name</span><span class="p">,</span> <span class="n">df</span><span class="o">.</span><span class="n">index</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">df</span></div>
+
+<div class="viewcode-block" id="DocMaker.clean_mindex_work"><a class="viewcode-back" href="../../code.html#great.doc_maker.DocMaker.clean_mindex_work">[docs]</a>    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">clean_mindex_work</span><span class="p">(</span><span class="n">idx</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">lv</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">idx</span><span class="o">.</span><span class="n">levels</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">lv</span><span class="o">.</span><span class="n">dtype</span> <span class="o">==</span> <span class="s1">&#39;object&#39;</span><span class="p">:</span>
+                <span class="n">repl</span> <span class="o">=</span> <span class="nb">map</span><span class="p">(</span><span class="n">DocMaker</span><span class="o">.</span><span class="n">clean_name</span><span class="p">,</span> <span class="n">lv</span><span class="p">)</span>
+                <span class="n">idx</span> <span class="o">=</span> <span class="n">idx</span><span class="o">.</span><span class="n">set_levels</span><span class="p">(</span><span class="n">repl</span><span class="p">,</span> <span class="n">level</span><span class="o">=</span><span class="n">i</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">idx</span></div></div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Stephen J Mildenhall.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

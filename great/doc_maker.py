@@ -6,9 +6,8 @@ https://deic-web.uab.cat/~iblanes/beamer_gallery/individual/default-orchid-serif
 
 Uses sticb from CEA project
 
-Usage example
+Usage example::
 
-```
 	test_df = pd.DataFrame(dict(x=range(100), y=range(100,200)))
 	fg, ax = plt.subplots(1,3)
 	f = test_df.plot(ax = ax[2])
@@ -24,7 +23,6 @@ Usage example
 	doc.write_markdown()
 
 	doc.process()
-```
 
 
 v 1.0 Dec 2019
@@ -39,15 +37,15 @@ from matplotlib.pyplot import Figure
 import pandas as pd
 import datetime
 from .markdown_make import markdown_make_main
-from .utils import logger
-# import logging
+# from .utils import logger
+import logging
 import re
 import numpy as np
 import shutil
 from IPython.display import Markdown, display
 
 
-# logger = logging.getLogger('aggregate')
+logger = logging.getLogger(__name__)
 
 # import sys
 # import re
@@ -159,10 +157,10 @@ debug: true
         :param back_up: make a back up of the last output file, default True
         :param unique_mode: make output file names unique
         :param label_prefix: prefix to add to labels for sub part vigs, these are only used in the docs for TeX
-                    accessed labels; they are not used to generate the filename - since these already refer
-                    to the vig name
-                    figure_dir
-                    table_dir over-ride defaults for figure and table outputs
+        accessed labels; they are not used to generate the filename - since these already refer
+        to the vig name
+        figure_dir
+        table_dir over-ride defaults for figure and table outputs
         :param default_table_font_size: float or zero, used as a custom font size
         """
 
@@ -424,35 +422,36 @@ debug: true
               here='', font_size='', custom_font_size=0.0,
               sparsify=False, force_float=False, output_style='default', **kwargs):
         """
-
-        nparts = split the table into nparts
+        ``nparts`` = split the table into nparts
 
         Splits df and passes to table to do the work.
 
-        Large Tables
-        ============
+        **Large Tables**
 
         Makes some attempt to split up very large tables
 
-
         Example
 
-        ```python
+        .. code-block:: python
+            :linenos:
 
-        import great as grt
+            import great as grt
 
-        DM = grt.DocMaker(f'notes\\dm.md',
+            DM = grt.DocMaker(f'notes\\dm.md',
                   key=f'dm-test',
                   title=f"Test of DocMaker",
                   tidy=True, back_up=True)
 
-        t = grt.test_df(10, 20)
-        DM.table(t, 'all-in-one', 'Trying to put the whole thing togeher. ')
-        DM.wide_table(t, 'wide-table', 'Splitting into 3 parts. ', nparts=3)
-        DM.process(12, 1)
-        ```
+            t = grt.test_df(10, 20)
+            DM.table(t, 'all-in-one', 'Trying to put the whole thing togeher. ')
+            DM.wide_table(t, 'wide-table', 'Splitting into 3 parts. ', nparts=3)
+            DM.process(12, 1)
 
-        ```tex
+        or in TeX:
+
+        .. code-block::
+            :linenos:
+
             \\begin{sidewaystable}
              \\caption{Table One}\\label{tab:one}
              \\centering
@@ -475,7 +474,7 @@ debug: true
                Some Values & Some Values & Some Values & Some Values \\\\ \\bottomrule
              \\end{tabular}
             \\end{sidewaystable}
-        ```
+
 
         :return:
 
@@ -511,24 +510,25 @@ debug: true
               here='', font_size='', sideways=False, custom_font_size=0.0,
               sparsify=False, force_float=False, output_style='default',
               multipart=0, new_slide=True, **kwargs):
-        r"""
+        """
         Add a table
         label used as file name
         stuff table in clipboard latex table, save to file...add caption, labels etc.
         rational formatting
 
-        force_float = convert input to float first (makes a copy) for col alignment
+        force_float = convert input to float first (makes a copy) for col alignment::
 
-            def sticb(self, df, float_format=None, fill_nan='', caption='caption', label='label', file_name='',
-                  here='', font_size=False, sideways=False, sparsify=False, **kwargs):
+            def sticb(self, df, float_format=None, fill_nan='', caption='caption', label='label',
+            file_name='', here='', font_size=False, sideways=False, sparsify=False, **kwargs)
 
         args passed to pandas to_latex
         From CEA project and Monograph SRM_Examples
 
-        output_style
-            with_table : all output in @@@ file and include in main md file; use when caption is generic
-            caption:   puts caption text in the main markdown file, use when caption will be edited
-            inline: all output in md file directly (not recommended)
+        ``output_style``
+
+        #.  with_table : all output in @@@ file and include in main md file; use when caption is generic
+        #.  caption:   puts caption text in the main markdown file, use when caption will be edited
+        #.  inline: all output in md file directly (not recommended)
 
         font_size = scriptsize, footnotesize etc.
 
@@ -537,7 +537,10 @@ debug: true
         multipart=True for widetable, then skip the beamer caption
 
         Test Cases
-        ==========
+
+        .. code-block:: python
+            :emphasize-lines: 3,5
+            :linenos:
 
             import great as grt
             from great.doc_maker import DocMaker
@@ -552,11 +555,12 @@ debug: true
             j = 0
             sideways = False
             for fs in ['normalsize', 'footnotesize', 'scriptsize', 'tiny']:
-                    for output_style in ['with_table', 'inline', 'caption']:
-                        j += 1
-                        DM.table(df, f'test-{j}',
-                                 f'Caption 1 with settings font-size={fs}, sideways={sideways}, output-style={output_style.replace("_", "-")}',
-                                 font_size=fs, sideways=sideways, output_style=output_style)
+                for output_style in ['with_table', 'inline', 'caption']:
+                    j += 1
+                    DM.table(df, f'test-{j}',
+                             f'Caption 1 with settings font-size={fs}, sideways={sideways},
+                             output-style={output_style.replace("_", "-")}',
+                             font_size=fs, sideways=sideways, output_style=output_style)
 
             sideways = True
             df = grt.test_df(ncols=20)
@@ -571,8 +575,6 @@ debug: true
 
             DM.process()
 
-        Parameters
-        ==========
 
         :param df:
         :param label:
@@ -581,16 +583,14 @@ debug: true
         :param fill_nan:
         :param here:
         :param font_size:
-        :param custom_font_size:  e.g.  input the size 0.15, second size will
-            be scaled up appropriately. Overrides font_size. \fontsize{0.15cm}{0.170cm}\selectfont
+        :param custom_font_size:  e.g.  input the size 0.15, second size will be scaled up appropriately.
+          Overrides font_size. \\fontsize{0.15cm}{0.170cm}\\selectfont
         :param sideways:
         :param sparsify:
         :param force_float:
-        :param output_style:
-        Can be None (default) or first, mid, last.
+        :param output_style: Can be None (default) or first, mid, last.
         :param kwargs:
         :return:
-
         """
         if self._off:
             return df

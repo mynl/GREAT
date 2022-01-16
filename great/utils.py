@@ -24,8 +24,7 @@ import logging
 from platform import platform
 from pathlib import Path
 
-logger = logging.getLogger('aggregate')
-
+logger = logging.getLogger(__name__)
 
 def filename(fn):
     """
@@ -556,4 +555,5 @@ grt.now()
 
 
 ip = get_ipython()
-ip.register_magics(GreatMagics)
+if ip is not None:
+    ip.register_magics(GreatMagics)

@@ -3,6 +3,11 @@ GREAT for Python
 
 """
 
+import logging
+
+logging.basicConfig(format='%(asctime)s | l. %(lineno) 5d | %(funcName)-22s | %(message)s',
+                    datefmt='%H:%M:%S')
+
 from .crypto import SFile
 from .doc_maker import DocMaker
 from .utils import checksum, float_to_binary, test_df, SimpleAxes, FigureManager, now, filename, binary

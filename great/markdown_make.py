@@ -28,7 +28,7 @@ from platform import platform
 import logging
 from io import StringIO
 
-logger = logging.getLogger('aggregate')
+logger = logging.getLogger(__name__)
 
 # for MarkdownMake
 CREATE_NO_WINDOW = 0x08000000
