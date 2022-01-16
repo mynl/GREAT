@@ -1,4 +1,5 @@
-## Welcome to GitHub Pages
+## GREAT
+**G**eneralizable **r**eusable **e**xtensible [**a**ctuarial] **t**oolkit.
 
 You can use the [editor on GitHub](https://github.com/mynl/GREAT/edit/master/README.md) to maintain and preview the content for your website in Markdown files.
 
