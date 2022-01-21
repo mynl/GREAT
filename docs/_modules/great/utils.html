@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>great.utils &mdash; GREAT 1.0.0 documentation</title>
+      <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="../../_static/css/theme.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="../../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="../../" id="documentation_options" src="../../_static/documentation_options.js"></script>
+        <script src="../../_static/jquery.js"></script>
+        <script src="../../_static/underscore.js"></script>
+        <script src="../../_static/doctools.js"></script>
+    <script src="../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+            <a href="../../index.html" class="icon icon-home"> GREAT
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../intro.html">Introduction to GREAT</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../code.html">GREAT CODE</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">GREAT</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../index.html" class="icon icon-home"></a> &raquo;</li>
+          <li><a href="../index.html">Module code</a> &raquo;</li>
+      <li>great.utils</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for great.utils</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">Misc. utilities</span>
+
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">import</span> <span class="nn">hashlib</span>
+<span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
+<span class="kn">import</span> <span class="nn">struct</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="k">as</span> <span class="nn">plt</span>
+<span class="kn">import</span> <span class="nn">matplotlib.ticker</span> <span class="k">as</span> <span class="nn">ticker</span>
+<span class="kn">import</span> <span class="nn">matplotlib</span> <span class="k">as</span> <span class="nn">mpl</span>
+<span class="kn">from</span> <span class="nn">cycler</span> <span class="kn">import</span> <span class="n">cycler</span>
+<span class="kn">from</span> <span class="nn">itertools</span> <span class="kn">import</span> <span class="n">product</span>
+<span class="kn">from</span> <span class="nn">io</span> <span class="kn">import</span> <span class="n">StringIO</span>
+<span class="c1"># import math</span>
+<span class="c1"># from numpy import floor</span>
+<span class="c1"># for magics</span>
+<span class="kn">from</span> <span class="nn">IPython</span> <span class="kn">import</span> <span class="n">get_ipython</span>
+<span class="kn">from</span> <span class="nn">IPython.core.magic</span> <span class="kn">import</span> <span class="n">line_magic</span><span class="p">,</span> <span class="n">cell_magic</span><span class="p">,</span> <span class="n">Magics</span><span class="p">,</span> <span class="n">magics_class</span><span class="p">,</span> <span class="n">line_cell_magic</span>
+<span class="kn">from</span> <span class="nn">IPython.core.magic_arguments</span> <span class="kn">import</span> <span class="n">argument</span><span class="p">,</span> <span class="n">magic_arguments</span><span class="p">,</span> <span class="n">parse_argstring</span>
+<span class="kn">from</span> <span class="nn">datetime</span> <span class="kn">import</span> <span class="n">datetime</span>
+<span class="kn">import</span> <span class="nn">logging</span>
+<span class="kn">from</span> <span class="nn">platform</span> <span class="kn">import</span> <span class="n">platform</span>
+<span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span>
+
+<span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+
+<div class="viewcode-block" id="filename"><a class="viewcode-back" href="../../code.html#great.utils.filename">[docs]</a><span class="k">def</span> <span class="nf">filename</span><span class="p">(</span><span class="n">fn</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    convert fn based relative to S to work on Linux or win and return a Path object</span>
+
+<span class="sd">    :param fn:</span>
+<span class="sd">    :return:</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">if</span> <span class="n">fn</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="s1">&#39;/&#39;</span><span class="p">:</span>
+        <span class="n">fn</span> <span class="o">=</span> <span class="n">fn</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span>
+
+    <span class="k">assert</span> <span class="n">fn</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="s1">&#39;S&#39;</span>
+
+    <span class="k">if</span> <span class="n">platform</span><span class="p">()[:</span><span class="mi">5</span><span class="p">]</span> <span class="o">==</span> <span class="s1">&#39;Linux&#39;</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">Path</span><span class="o">.</span><span class="n">home</span><span class="p">()</span> <span class="o">/</span> <span class="n">fn</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">Path</span><span class="p">(</span><span class="n">fn</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="now"><a class="viewcode-back" href="../../code.html#great.utils.now">[docs]</a><span class="k">def</span> <span class="nf">now</span><span class="p">():</span>
+    <span class="k">return</span> <span class="s1">&#39;Created {date:%Y-%m-</span><span class="si">%d</span><span class="s1"> %H:%M:%S.</span><span class="si">%f</span><span class="s1">}&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">date</span><span class="o">=</span><span class="n">datetime</span><span class="o">.</span><span class="n">now</span><span class="p">())</span><span class="o">.</span><span class="n">rstrip</span><span class="p">(</span><span class="s1">&#39;0&#39;</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="checksum"><a class="viewcode-back" href="../../code.html#great.utils.checksum">[docs]</a><span class="k">def</span> <span class="nf">checksum</span><span class="p">(</span><span class="n">ob</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    make the checksum of an object in a reasonable way</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">hasher</span> <span class="o">=</span> <span class="n">hashlib</span><span class="o">.</span><span class="n">sha256</span><span class="p">()</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">ob</span><span class="p">,</span> <span class="n">pd</span><span class="o">.</span><span class="n">core</span><span class="o">.</span><span class="n">frame</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">):</span>
+        <span class="n">bob</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">ob</span><span class="o">.</span><span class="n">head</span><span class="p">(</span><span class="mi">20</span><span class="p">)</span><span class="o">.</span><span class="n">T</span><span class="p">)</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="s1">&#39;utf-8&#39;</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">bob</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">ob</span><span class="p">)</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="s1">&#39;utf-8&#39;</span><span class="p">)</span>
+    <span class="n">hasher</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">bob</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">hasher</span><span class="o">.</span><span class="n">hexdigest</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="test_df"><a class="viewcode-back" href="../../code.html#great.utils.test_df">[docs]</a><span class="k">def</span> <span class="nf">test_df</span><span class="p">(</span><span class="n">nrows</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">ncols</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">multi_index</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">hack</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    make a dummy test dataframe</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">multi_index</span><span class="p">:</span> <span class="n">ncols</span> <span class="o">+=</span> <span class="mi">2</span>
+    <span class="n">colnames</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="s1">&#39;ABCDEFGHIJKLMNOPQRSTUVWXYZ&#39;</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="n">ncols</span> <span class="o">&lt;</span> <span class="mi">26</span>
+    <span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">rand</span><span class="p">(</span><span class="n">nrows</span><span class="p">,</span> <span class="n">ncols</span><span class="p">),</span> <span class="n">columns</span><span class="o">=</span><span class="n">colnames</span><span class="p">[:</span><span class="n">ncols</span><span class="p">])</span>
+    <span class="n">df</span><span class="o">.</span><span class="n">columns</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="s1">&#39;col_name&#39;</span>
+    <span class="n">df</span><span class="o">.</span><span class="n">index</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="s1">&#39;idx_name&#39;</span>
+    <span class="k">if</span> <span class="n">multi_index</span><span class="p">:</span>
+        <span class="n">df</span><span class="o">.</span><span class="n">iloc</span><span class="p">[:,</span> <span class="o">-</span><span class="mi">2</span><span class="p">]</span> <span class="o">=</span> <span class="nb">range</span><span class="p">(</span><span class="n">nrows</span><span class="p">)</span>
+        <span class="n">df</span><span class="o">.</span><span class="n">iloc</span><span class="p">[:,</span> <span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">choice</span><span class="p">(</span><span class="n">colnames</span><span class="p">,</span> <span class="n">nrows</span><span class="p">)</span>
+        <span class="n">df</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">set_index</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">df</span><span class="o">.</span><span class="n">columns</span><span class="p">[</span><span class="o">-</span><span class="mi">2</span><span class="p">:]))</span>
+        <span class="n">df</span><span class="o">.</span><span class="n">index</span><span class="o">.</span><span class="n">names</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;l1_name&#39;</span><span class="p">,</span> <span class="s1">&#39;l2_name&#39;</span><span class="p">]</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">hack</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">df</span>
+
+    <span class="n">n</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">df</span><span class="p">)</span>
+    <span class="n">df</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">n</span><span class="o">+</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="p">([</span><span class="s1">&#39;One&#39;</span><span class="p">,</span> <span class="s1">&#39;One&#39;</span><span class="p">,</span> <span class="s1">&#39;One&#39;</span><span class="p">,</span> <span class="s1">&#39;More QplP add others&#39;</span><span class="p">]</span><span class="o">*</span><span class="mi">10</span><span class="p">)[:</span><span class="n">ncols</span><span class="p">]</span>
+    <span class="n">df</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">n</span><span class="o">+</span><span class="mi">2</span><span class="p">]</span> <span class="o">=</span> <span class="p">([</span><span class="s1">&#39;Two&#39;</span><span class="p">,</span> <span class="s1">&#39;Two&#39;</span><span class="p">,</span> <span class="s1">&#39;Three&#39;</span><span class="p">,</span> <span class="s1">&#39;Four pL&#39;</span><span class="p">]</span><span class="o">*</span><span class="mi">10</span><span class="p">)[:</span><span class="n">ncols</span><span class="p">]</span>
+    <span class="n">df</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">n</span><span class="o">+</span><span class="mi">3</span><span class="p">]</span> <span class="o">=</span> <span class="n">colnames</span><span class="p">[:</span><span class="n">ncols</span><span class="p">]</span>
+    <span class="n">df</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">T</span>
+    <span class="n">df</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">set_index</span><span class="p">([</span><span class="n">n</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span> <span class="n">n</span><span class="o">+</span><span class="mi">2</span><span class="p">,</span> <span class="n">n</span><span class="o">+</span><span class="mi">3</span><span class="p">])</span>
+    <span class="n">df</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">T</span>
+    <span class="n">df</span><span class="o">.</span><span class="n">columns</span><span class="o">.</span><span class="n">names</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;Level 1&#39;</span><span class="p">,</span> <span class="s1">&#39;Lp 2&#39;</span><span class="p">,</span> <span class="s1">&#39;lv 3&#39;</span><span class="p">]</span>
+    <span class="n">df</span><span class="p">[</span><span class="s1">&#39;G&#39;</span><span class="p">]</span> <span class="o">=</span>  <span class="p">[</span><span class="sa">f</span><span class="s1">&#39;hello </span><span class="si">{</span><span class="n">i</span> <span class="o">//</span> <span class="mi">3</span><span class="si">}</span><span class="s1">&#39;</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">df</span><span class="p">))]</span>
+    <span class="n">df</span><span class="p">[</span><span class="s1">&#39;H&#39;</span><span class="p">]</span> <span class="o">=</span>  <span class="p">[</span><span class="sa">f</span><span class="s1">&#39;beppi </span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s1">&#39;</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">df</span><span class="p">))]</span>
+    <span class="n">df</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">set_index</span><span class="p">([</span><span class="s1">&#39;G&#39;</span><span class="p">,</span> <span class="s1">&#39;H&#39;</span><span class="p">])</span>
+    <span class="k">return</span> <span class="n">df</span></div>
+
+<div class="viewcode-block" id="float_to_binary"><a class="viewcode-back" href="../../code.html#great.utils.float_to_binary">[docs]</a><span class="k">def</span> <span class="nf">float_to_binary</span><span class="p">(</span><span class="n">num</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Certain floats like 0.1 have very awkward binary reps and lead to floating point issues,</span>
+<span class="sd">    and hence indexing issues. Best just to avoid. E.g. don&#39;t use 0.1 use 0.125 as a bs. etc.</span>
+
+<span class="sd">    This function lets you see the binary expansion of the float.</span>
+
+<span class="sd">    Struct can provide us with the float packed into bytes. The &#39;!&#39; ensures that</span>
+<span class="sd">    it&#39;s in network byte order (big-endian) and the &#39;f&#39; says that it should be</span>
+<span class="sd">    packed as a float. Alternatively, for double-precision, you could use &#39;d&#39;.</span>
+
+<span class="sd">    https://stackoverflow.com/questions/16444726/binary-representation-of-float-in-python-bits-not-hex</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">packed</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">pack</span><span class="p">(</span><span class="s1">&#39;!f&#39;</span><span class="p">,</span> <span class="n">num</span><span class="p">)</span>
+    <span class="c1"># print(&#39;Packed: %s&#39; % repr(packed))</span>
+
+    <span class="c1"># For each integer, we&#39;ll convert it to its binary representation.</span>
+    <span class="n">binaries</span> <span class="o">=</span> <span class="p">[</span><span class="nb">bin</span><span class="p">(</span><span class="n">i</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">packed</span><span class="p">]</span>
+    <span class="c1"># print (&#39;Binaries: %s&#39; % binaries)</span>
+
+    <span class="c1"># Now strip off the &#39;0b&#39; from each of these</span>
+    <span class="n">stripped_binaries</span> <span class="o">=</span> <span class="p">[</span><span class="n">s</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s1">&#39;0b&#39;</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="p">)</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">binaries</span><span class="p">]</span>
+    <span class="c1"># print (&#39;Stripped: %s&#39; % stripped_binaries)</span>
+
+    <span class="c1"># Pad each byte&#39;s binary representation&#39;s with 0&#39;s to make sure it has all 8 bits:</span>
+    <span class="c1">#</span>
+    <span class="c1"># [&#39;00111110&#39;, &#39;10100011&#39;, &#39;11010111&#39;, &#39;00001010&#39;]</span>
+    <span class="n">padded</span> <span class="o">=</span> <span class="p">[</span><span class="n">s</span><span class="o">.</span><span class="n">rjust</span><span class="p">(</span><span class="mi">8</span><span class="p">,</span> <span class="s1">&#39;0&#39;</span><span class="p">)</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">stripped_binaries</span><span class="p">]</span>
+    <span class="c1"># print( &#39;Padded: %s&#39; % padded)</span>
+
+    <span class="c1"># At this point, we have each of the bytes for the network byte ordered float</span>
+    <span class="c1"># in an array as binary strings. Now we just concatenate them to get the total</span>
+    <span class="c1"># representation of the float:</span>
+    <span class="k">return</span> <span class="s1">&#39;&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">padded</span><span class="p">)</span></div>
+
+<span class="c1"># alias</span>
+<span class="n">binary</span> <span class="o">=</span> <span class="n">float_to_binary</span>
+
+<span class="c1"># general utilities</span>
+<div class="viewcode-block" id="SimpleAxes"><a class="viewcode-back" href="../../code.html#great.utils.SimpleAxes">[docs]</a><span class="k">class</span> <span class="nc">SimpleAxes</span><span class="p">():</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">n</span><span class="p">,</span> <span class="n">nc</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">aspect</span><span class="o">=</span><span class="mf">1.5</span><span class="p">,</span> <span class="n">sm_height</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span> <span class="n">lg_height</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        make a reasonable grid of n axes nc per row with given height and aspect ratio</span>
+<span class="sd">        returns the figure, the axs and ax iterator</span>
+<span class="sd">        sm_height uses for two or more rows</span>
+<span class="sd">        lg_height used for just one row</span>
+
+<span class="sd">        kwargs passed to subplots, e.g. sharex sharey</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">nc</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">nc</span><span class="p">,</span> <span class="n">n</span><span class="p">)</span>
+        <span class="n">nr</span> <span class="o">=</span> <span class="n">n</span> <span class="o">//</span> <span class="n">nc</span>
+        <span class="k">if</span> <span class="n">n</span> <span class="o">%</span> <span class="n">nc</span><span class="p">:</span>
+            <span class="n">nr</span> <span class="o">+=</span> <span class="mi">1</span>
+        <span class="k">if</span> <span class="n">nr</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">height</span> <span class="o">=</span> <span class="n">sm_height</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">height</span> <span class="o">=</span> <span class="n">lg_height</span>
+        <span class="n">w</span> <span class="o">=</span> <span class="n">nc</span> <span class="o">*</span> <span class="n">height</span> <span class="o">*</span> <span class="n">aspect</span>
+        <span class="n">h</span> <span class="o">=</span> <span class="n">nr</span> <span class="o">*</span> <span class="n">height</span>
+        <span class="n">sc</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">w</span><span class="p">,</span> <span class="mi">8</span><span class="p">)</span> <span class="o">/</span> <span class="n">w</span>
+        <span class="n">w</span> <span class="o">*=</span> <span class="n">sc</span>
+        <span class="n">h</span> <span class="o">*=</span> <span class="n">sc</span>
+        <span class="n">w</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">w</span><span class="p">,</span> <span class="mi">8</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">f</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">axs</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="n">nr</span><span class="p">,</span> <span class="n">nc</span><span class="p">,</span> <span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="n">w</span><span class="p">,</span> <span class="n">h</span><span class="p">),</span> <span class="n">squeeze</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                                        <span class="n">constrained_layout</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">axit</span> <span class="o">=</span> <span class="nb">iter</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">axs</span><span class="o">.</span><span class="n">flatten</span><span class="p">())</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_ax</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="k">def</span> <span class="fm">__next__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_ax</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">axit</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ax</span>
+
+<div class="viewcode-block" id="SimpleAxes.get_figure"><a class="viewcode-back" href="../../code.html#great.utils.SimpleAxes.get_figure">[docs]</a>    <span class="k">def</span> <span class="nf">get_figure</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">f</span></div>
+
+<div class="viewcode-block" id="SimpleAxes.tidy"><a class="viewcode-back" href="../../code.html#great.utils.SimpleAxes.tidy">[docs]</a>    <span class="k">def</span> <span class="nf">tidy</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        remove all unused plots</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">while</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">f</span><span class="o">.</span><span class="n">delaxes</span><span class="p">(</span><span class="nb">next</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">axit</span><span class="p">))</span>
+        <span class="k">except</span> <span class="ne">StopIteration</span><span class="p">:</span>
+            <span class="k">return</span></div>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">ax</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ax</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_ax</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">axit</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ax</span></div>
+
+<span class="c1"># Great Formatter</span>
+<div class="viewcode-block" id="GreatFormatter"><a class="viewcode-back" href="../../code.html#great.utils.GreatFormatter">[docs]</a><span class="k">class</span> <span class="nc">GreatFormatter</span><span class="p">(</span><span class="n">ticker</span><span class="o">.</span><span class="n">ScalarFormatter</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">sci</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">power_range</span><span class="o">=</span><span class="p">(</span><span class="o">-</span><span class="mi">3</span><span class="p">,</span><span class="mi">3</span><span class="p">),</span> <span class="n">offset</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">mathText</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">useOffset</span><span class="o">=</span><span class="n">offset</span><span class="p">,</span><span class="n">useMathText</span><span class="o">=</span><span class="n">mathText</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">set_powerlimits</span><span class="p">(</span><span class="n">power_range</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">set_scientific</span><span class="p">(</span><span class="n">sci</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_set_order_of_magnitude</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_set_order_of_magnitude</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">orderOfMagnitude</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="mi">3</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">floor</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">orderOfMagnitude</span> <span class="o">/</span> <span class="mi">3</span><span class="p">))</span></div>
+
+
+<span class="c1"># Another figure/plotter manager: manages cycles for color/black and white</span>
+<div class="viewcode-block" id="FigureManager"><a class="viewcode-back" href="../../code.html#great.utils.FigureManager">[docs]</a><span class="k">class</span> <span class="nc">FigureManager</span><span class="p">():</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cycle</span><span class="o">=</span><span class="s1">&#39;c&#39;</span><span class="p">,</span> <span class="n">lw</span><span class="o">=</span><span class="mf">1.5</span><span class="p">,</span> <span class="n">color_mode</span><span class="o">=</span><span class="s1">&#39;mono&#39;</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="mf">0.8</span><span class="p">,</span> <span class="n">font_size</span><span class="o">=</span><span class="mi">12</span><span class="p">,</span>
+                 <span class="n">legend_font</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="p">,</span> <span class="n">use_tex</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">default_figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mf">3.5</span><span class="p">)):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Font size was 9 and legend was x-small</span>
+
+<span class="sd">        Create figure with common defaults</span>
+
+<span class="sd">        cycle = cws</span>
+<span class="sd">            c - cycle colors</span>
+<span class="sd">            w - cycle widths</span>
+<span class="sd">            s - cycle styles</span>
+<span class="sd">            o - styles x colors, implies csw and w=single number (produces 8 series)</span>
+
+<span class="sd">        lw = default line width or [lws] of length 4</span>
+
+<span class="sd">        smaller k overall darker lines; colors are equally spaced between 0 and k</span>
+<span class="sd">        k=0.8 is a reasonable range for four colors (0, k/3, 2k/3, k)</span>
+
+<span class="sd">        https://matplotlib.org/3.1.1/tutorials/intermediate/color_cycle.html</span>
+
+<span class="sd">        https://matplotlib.org/3.1.1/users/dflt_style_changes.html#colors-in-default-property-cycle</span>
+
+<span class="sd">        https://matplotlib.org/2.0.2/examples/color/colormaps_reference.html</span>
+
+<span class="sd">        https://matplotlib.org/3.1.0/gallery/lines_bars_and_markers/linestyles.html</span>
+
+<span class="sd">        https://stackoverflow.com/questions/22408237/named-colors-in-matplotlib</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">cycle</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span>
+
+        <span class="c1"># this sets a much smaller base fontsize</span>
+        <span class="c1"># plt.rcParams.update({&#39;font.size&#39;: 12})</span>
+        <span class="c1"># plt.rcParams.update({&#39;axes.titlesize&#39;: &#39;large&#39;})</span>
+        <span class="c1"># plt.rcParams.update({&#39;axes.labelsize&#39;: &#39;small&#39;})</span>
+        <span class="c1"># list(map(plt.rcParams.get, (&#39;axes.titlesize&#39;, &#39;font.size&#39;)))</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">rcParams</span><span class="o">.</span><span class="n">update</span><span class="p">({</span><span class="s1">&#39;font.size&#39;</span><span class="p">:</span> <span class="n">font_size</span><span class="p">})</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">default_figsize</span> <span class="o">=</span> <span class="n">default_figsize</span>
+
+        <span class="k">if</span> <span class="n">legend_font</span> <span class="o">!=</span> <span class="s1">&#39;&#39;</span><span class="p">:</span>
+            <span class="n">plt</span><span class="o">.</span><span class="n">rcParams</span><span class="p">[</span><span class="s1">&#39;legend.fontsize&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">legend_font</span>
+
+        <span class="n">plt</span><span class="o">.</span><span class="n">rc</span><span class="p">(</span><span class="s1">&#39;font&#39;</span><span class="p">,</span> <span class="n">family</span><span class="o">=</span><span class="s1">&#39;serif&#39;</span><span class="p">)</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">rc</span><span class="p">(</span><span class="s1">&#39;text&#39;</span><span class="p">,</span> <span class="n">usetex</span><span class="o">=</span><span class="n">use_tex</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">color_mode</span> <span class="o">==</span> <span class="s1">&#39;mono&#39;</span><span class="p">:</span>
+            <span class="c1"># https://stackoverflow.com/questions/20118258/matplotlib-coloring-line-plots-by-iteration-dependent-gray-scale</span>
+            <span class="c1"># default_colors = [&#39;black&#39;, &#39;grey&#39;, &#39;darkgrey&#39;, &#39;lightgrey&#39;]</span>
+            <span class="n">default_colors</span> <span class="o">=</span> <span class="p">[(</span><span class="n">i</span><span class="o">*</span><span class="n">k</span><span class="p">,</span> <span class="n">i</span><span class="o">*</span><span class="n">k</span><span class="p">,</span> <span class="n">i</span><span class="o">*</span><span class="n">k</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="o">/</span><span class="mi">3</span><span class="p">,</span> <span class="mi">2</span><span class="o">/</span><span class="mi">3</span><span class="p">,</span> <span class="mi">1</span><span class="p">]]</span>
+            <span class="n">default_ls</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;solid&#39;</span><span class="p">,</span> <span class="s1">&#39;dashed&#39;</span><span class="p">,</span> <span class="s1">&#39;dotted&#39;</span><span class="p">,</span> <span class="s1">&#39;dashdot&#39;</span><span class="p">]</span>
+
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># print(plt.rcParams[&#39;axes.prop_cycle&#39;].by_key()[&#39;color&#39;])</span>
+            <span class="n">default_colors</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;#1f77b4&#39;</span><span class="p">,</span> <span class="s1">&#39;#ff7f0e&#39;</span><span class="p">,</span> <span class="s1">&#39;#2ca02c&#39;</span><span class="p">,</span> <span class="s1">&#39;#d62728&#39;</span><span class="p">,</span> <span class="s1">&#39;#9467bd&#39;</span><span class="p">,</span> <span class="s1">&#39;#8c564b&#39;</span><span class="p">,</span> <span class="s1">&#39;#e377c2&#39;</span><span class="p">,</span>
+                              <span class="s1">&#39;#7f7f7f&#39;</span><span class="p">,</span> <span class="s1">&#39;#bcbd22&#39;</span><span class="p">,</span> <span class="s1">&#39;#17becf&#39;</span><span class="p">]</span>
+            <span class="n">default_ls</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;solid&#39;</span><span class="p">,</span> <span class="s1">&#39;dashed&#39;</span><span class="p">,</span> <span class="s1">&#39;dotted&#39;</span><span class="p">,</span> <span class="s1">&#39;dashdot&#39;</span><span class="p">,</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">1</span><span class="p">))]</span> <span class="o">*</span> <span class="mi">2</span>
+
+        <span class="n">props</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">if</span> <span class="s1">&#39;o&#39;</span> <span class="ow">in</span> <span class="n">cycle</span><span class="p">:</span>
+            <span class="n">n</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">default_colors</span><span class="p">)</span> <span class="o">//</span> <span class="mi">2</span>
+            <span class="k">if</span> <span class="n">color_mode</span> <span class="o">==</span> <span class="s1">&#39;mono&#39;</span><span class="p">:</span>
+                <span class="n">cc</span> <span class="o">=</span> <span class="p">[</span><span class="n">i</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">product</span><span class="p">(</span><span class="n">default_ls</span><span class="p">,</span> <span class="n">default_colors</span><span class="p">[::</span><span class="mi">2</span><span class="p">])]</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">cc</span> <span class="o">=</span> <span class="p">[</span><span class="n">i</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">product</span><span class="p">(</span><span class="n">default_ls</span><span class="p">,</span> <span class="n">default_colors</span><span class="p">[:</span><span class="n">n</span><span class="p">])]</span>
+            <span class="n">lsc</span> <span class="o">=</span> <span class="p">[</span><span class="n">i</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">product</span><span class="p">(</span><span class="n">default_ls</span><span class="p">,</span> <span class="n">default_colors</span><span class="p">[:</span><span class="n">n</span><span class="p">])]</span>
+            <span class="n">props</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">cycler</span><span class="p">(</span><span class="s1">&#39;color&#39;</span><span class="p">,</span> <span class="n">cc</span><span class="p">))</span>
+            <span class="n">props</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">cycler</span><span class="p">(</span><span class="s1">&#39;linewidth&#39;</span><span class="p">,</span> <span class="p">[</span><span class="n">lw</span><span class="p">]</span> <span class="o">*</span> <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">default_colors</span><span class="p">)</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">default_ls</span><span class="p">)</span> <span class="o">//</span> <span class="mi">2</span><span class="p">)))</span>
+            <span class="n">props</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">cycler</span><span class="p">(</span><span class="s1">&#39;linestyle&#39;</span><span class="p">,</span> <span class="n">lsc</span><span class="p">))</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">if</span> <span class="s1">&#39;c&#39;</span> <span class="ow">in</span> <span class="n">cycle</span><span class="p">:</span>
+                <span class="n">props</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">cycler</span><span class="p">(</span><span class="s1">&#39;color&#39;</span><span class="p">,</span> <span class="n">default_colors</span><span class="p">))</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">props</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">cycler</span><span class="p">(</span><span class="s1">&#39;color&#39;</span><span class="p">,</span> <span class="p">[</span><span class="n">default_colors</span><span class="p">[</span><span class="mi">0</span><span class="p">]]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">default_ls</span><span class="p">)))</span>
+            <span class="k">if</span> <span class="s1">&#39;w&#39;</span> <span class="ow">in</span> <span class="n">cycle</span><span class="p">:</span>
+                <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="n">lw</span><span class="p">)</span> <span class="o">==</span> <span class="nb">int</span><span class="p">:</span>
+                    <span class="n">props</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">cycler</span><span class="p">(</span><span class="s1">&#39;linewidth&#39;</span><span class="p">,</span> <span class="p">[</span><span class="n">lw</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">default_colors</span><span class="p">)))</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">props</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">cycler</span><span class="p">(</span><span class="s1">&#39;linewidth&#39;</span><span class="p">,</span> <span class="n">lw</span><span class="p">))</span>
+            <span class="k">if</span> <span class="s1">&#39;s&#39;</span> <span class="ow">in</span> <span class="n">cycle</span><span class="p">:</span>
+                <span class="n">props</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">cycler</span><span class="p">(</span><span class="s1">&#39;linestyle&#39;</span><span class="p">,</span> <span class="n">default_ls</span><span class="p">))</span>
+
+        <span class="c1"># combine all cyclers</span>
+        <span class="n">cprops</span> <span class="o">=</span> <span class="n">props</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">props</span><span class="p">[</span><span class="mi">1</span><span class="p">:]:</span>
+            <span class="n">cprops</span> <span class="o">+=</span> <span class="n">c</span>
+
+        <span class="n">mpl</span><span class="o">.</span><span class="n">rcParams</span><span class="p">[</span><span class="s1">&#39;axes.prop_cycle&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">cycler</span><span class="p">(</span><span class="n">cprops</span><span class="p">)</span>
+        <span class="c1"># for a in axs.flatten():</span>
+        <span class="c1">#     a.set_prop_cycle(cprops)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">last_fig</span> <span class="o">=</span> <span class="kc">None</span>
+
+<div class="viewcode-block" id="FigureManager.make_fig"><a class="viewcode-back" href="../../code.html#great.utils.FigureManager.make_fig">[docs]</a>    <span class="k">def</span> <span class="nf">make_fig</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">nr</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">nc</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">figsize</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">xfmt</span><span class="o">=</span><span class="s1">&#39;great&#39;</span><span class="p">,</span> <span class="n">yfmt</span><span class="o">=</span><span class="s1">&#39;great&#39;</span><span class="p">,</span>
+                <span class="n">places</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">power_range</span><span class="o">=</span><span class="p">(</span><span class="o">-</span><span class="mi">3</span><span class="p">,</span><span class="mi">3</span><span class="p">),</span> <span class="n">sep</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="p">,</span> <span class="n">unit</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="p">,</span> <span class="n">sci</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                <span class="n">mathText</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">offset</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+
+<span class="sd">        make grid of axes</span>
+<span class="sd">        apply format to xy axes</span>
+
+<span class="sd">        xfmt=&#39;d&#39; for default axis formatting, n=nice, e=engineering, s=scientific, g=great</span>
+<span class="sd">        great = engineering with power of three exponents</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="k">if</span> <span class="n">figsize</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">figsize</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">default_figsize</span>
+
+        <span class="n">f</span><span class="p">,</span> <span class="n">axs</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="n">nr</span><span class="p">,</span> <span class="n">nc</span><span class="p">,</span> <span class="n">figsize</span><span class="o">=</span><span class="n">figsize</span><span class="p">,</span> <span class="n">constrained_layout</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">squeeze</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">ax</span> <span class="ow">in</span> <span class="n">axs</span><span class="o">.</span><span class="n">flat</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">xfmt</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">!=</span> <span class="s1">&#39;d&#39;</span><span class="p">:</span>
+                <span class="n">FigureManager</span><span class="o">.</span><span class="n">easy_formatter</span><span class="p">(</span><span class="n">ax</span><span class="p">,</span> <span class="n">which</span><span class="o">=</span><span class="s1">&#39;x&#39;</span><span class="p">,</span> <span class="n">kind</span><span class="o">=</span><span class="n">xfmt</span><span class="p">,</span> <span class="n">places</span><span class="o">=</span><span class="n">places</span><span class="p">,</span>
+                    <span class="n">power_range</span><span class="o">=</span><span class="n">power_range</span><span class="p">,</span> <span class="n">sep</span><span class="o">=</span><span class="n">sep</span><span class="p">,</span> <span class="n">unit</span><span class="o">=</span><span class="n">unit</span><span class="p">,</span> <span class="n">sci</span><span class="o">=</span><span class="n">sci</span><span class="p">,</span> <span class="n">mathText</span><span class="o">=</span><span class="n">mathText</span><span class="p">,</span> <span class="n">offset</span><span class="o">=</span><span class="n">offset</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">yfmt</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">!=</span> <span class="s1">&#39;default&#39;</span><span class="p">:</span>
+                <span class="n">FigureManager</span><span class="o">.</span><span class="n">easy_formatter</span><span class="p">(</span><span class="n">ax</span><span class="p">,</span> <span class="n">which</span><span class="o">=</span><span class="s1">&#39;y&#39;</span><span class="p">,</span> <span class="n">kind</span><span class="o">=</span><span class="n">yfmt</span><span class="p">,</span> <span class="n">places</span><span class="o">=</span><span class="n">places</span><span class="p">,</span>
+                    <span class="n">power_range</span><span class="o">=</span><span class="n">power_range</span><span class="p">,</span> <span class="n">sep</span><span class="o">=</span><span class="n">sep</span><span class="p">,</span> <span class="n">unit</span><span class="o">=</span><span class="n">unit</span><span class="p">,</span> <span class="n">sci</span><span class="o">=</span><span class="n">sci</span><span class="p">,</span> <span class="n">mathText</span><span class="o">=</span><span class="n">mathText</span><span class="p">,</span> <span class="n">offset</span><span class="o">=</span><span class="n">offset</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">nr</span> <span class="o">*</span> <span class="n">nc</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">axs</span> <span class="o">=</span> <span class="n">axs</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">last_fig</span> <span class="o">=</span> <span class="n">f</span>
+        <span class="k">return</span> <span class="n">f</span><span class="p">,</span> <span class="n">axs</span></div>
+
+    <span class="fm">__call__</span> <span class="o">=</span> <span class="n">make_fig</span>
+
+<div class="viewcode-block" id="FigureManager.save_fig"><a class="viewcode-back" href="../../code.html#great.utils.FigureManager.save_fig">[docs]</a>    <span class="k">def</span> <span class="nf">save_fig</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fn</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Save the last figure at fn</span>
+
+<span class="sd">        Mostly will be saved by the docmaker</span>
+
+<span class="sd">        :param fn:</span>
+<span class="sd">        :return:</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">last_fig</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">last_fig</span><span class="o">.</span><span class="n">savefig</span><span class="p">(</span><span class="n">fn</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="FigureManager.easy_formatter"><a class="viewcode-back" href="../../code.html#great.utils.FigureManager.easy_formatter">[docs]</a>    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">easy_formatter</span><span class="p">(</span><span class="n">ax</span><span class="p">,</span> <span class="n">which</span><span class="p">,</span> <span class="n">kind</span><span class="p">,</span> <span class="n">places</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">power_range</span><span class="o">=</span><span class="p">(</span><span class="o">-</span><span class="mi">3</span><span class="p">,</span><span class="mi">3</span><span class="p">),</span> <span class="n">sep</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="p">,</span> <span class="n">unit</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="p">,</span> <span class="n">sci</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="n">mathText</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">offset</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        set which (x, y, b, both) to kind = sci, eng, nice</span>
+<span class="sd">        nice = engineering but uses e-3, e-6 etc.</span>
+<span class="sd">        see docs for ScalarFormatter and EngFormatter</span>
+
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">def</span> <span class="nf">make_fmt</span><span class="p">(</span><span class="n">kind</span><span class="p">,</span> <span class="n">places</span><span class="p">,</span> <span class="n">power_range</span><span class="p">,</span> <span class="n">sep</span><span class="p">,</span> <span class="n">unit</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">kind</span><span class="o">==</span><span class="s1">&#39;sci&#39;</span> <span class="ow">or</span> <span class="n">kind</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">==</span><span class="s1">&#39;s&#39;</span><span class="p">:</span>
+                <span class="n">fm</span> <span class="o">=</span> <span class="n">ticker</span><span class="o">.</span><span class="n">ScalarFormatter</span><span class="p">()</span>
+                <span class="n">fm</span><span class="o">.</span><span class="n">set_powerlimits</span><span class="p">(</span><span class="n">power_range</span><span class="p">)</span>
+                <span class="n">fm</span><span class="o">.</span><span class="n">set_scientific</span><span class="p">(</span><span class="kc">True</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="n">kind</span><span class="o">==</span><span class="s1">&#39;eng&#39;</span> <span class="ow">or</span> <span class="n">kind</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">==</span><span class="s1">&#39;e&#39;</span><span class="p">:</span>
+                <span class="n">fm</span> <span class="o">=</span> <span class="n">ticker</span><span class="o">.</span><span class="n">EngFormatter</span><span class="p">(</span><span class="n">unit</span><span class="o">=</span><span class="n">unit</span><span class="p">,</span> <span class="n">places</span><span class="o">=</span><span class="n">places</span><span class="p">,</span> <span class="n">sep</span><span class="o">=</span><span class="n">sep</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="n">kind</span><span class="o">==</span><span class="s1">&#39;great&#39;</span> <span class="ow">or</span> <span class="n">kind</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">==</span><span class="s1">&#39;g&#39;</span><span class="p">:</span>
+                <span class="n">fm</span> <span class="o">=</span> <span class="n">GreatFormatter</span><span class="p">(</span><span class="n">sci</span><span class="o">=</span><span class="n">sci</span><span class="p">,</span> <span class="n">power_range</span><span class="o">=</span><span class="n">power_range</span><span class="p">,</span> <span class="n">offset</span><span class="o">=</span><span class="n">offset</span><span class="p">,</span> <span class="n">mathText</span><span class="o">=</span><span class="n">mathText</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="n">kind</span><span class="o">==</span><span class="s1">&#39;nice&#39;</span> <span class="ow">or</span> <span class="n">kind</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">==</span><span class="s1">&#39;n&#39;</span><span class="p">:</span>
+                <span class="n">fm</span> <span class="o">=</span> <span class="n">ticker</span><span class="o">.</span><span class="n">EngFormatter</span><span class="p">(</span><span class="n">unit</span><span class="o">=</span><span class="n">unit</span><span class="p">,</span> <span class="n">places</span><span class="o">=</span><span class="n">places</span><span class="p">,</span> <span class="n">sep</span><span class="o">=</span><span class="n">sep</span><span class="p">)</span>
+                <span class="n">fm</span><span class="o">.</span><span class="n">ENG_PREFIXES</span> <span class="o">=</span> <span class="p">{</span> <span class="n">i</span><span class="p">:</span> <span class="sa">f</span><span class="s1">&#39;e</span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s1">&#39;</span> <span class="k">if</span> <span class="n">i</span> <span class="k">else</span> <span class="s1">&#39;&#39;</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="o">-</span><span class="mi">24</span><span class="p">,</span> <span class="mi">25</span><span class="p">,</span> <span class="mi">3</span><span class="p">)}</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;Passed </span><span class="si">{</span><span class="n">kind</span><span class="si">}</span><span class="s1">, expected sci or eng&#39;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">fm</span>
+
+        <span class="c1"># what to set</span>
+        <span class="k">if</span> <span class="n">which</span><span class="o">==</span><span class="s1">&#39;b&#39;</span> <span class="ow">or</span> <span class="n">which</span><span class="o">==</span><span class="s1">&#39;both&#39;</span><span class="p">:</span>
+            <span class="n">which</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;xaxis&#39;</span><span class="p">,</span> <span class="s1">&#39;yaxis&#39;</span><span class="p">]</span>
+        <span class="k">elif</span> <span class="n">which</span><span class="o">==</span><span class="s1">&#39;x&#39;</span><span class="p">:</span>
+            <span class="n">which</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;xaxis&#39;</span><span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">which</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;yaxis&#39;</span><span class="p">]</span>
+
+        <span class="k">for</span> <span class="n">l</span> <span class="ow">in</span> <span class="n">which</span><span class="p">:</span>
+            <span class="n">fm</span> <span class="o">=</span> <span class="n">make_fmt</span><span class="p">(</span><span class="n">kind</span><span class="p">,</span> <span class="n">places</span><span class="p">,</span> <span class="n">power_range</span><span class="p">,</span> <span class="n">sep</span><span class="p">,</span> <span class="n">unit</span><span class="p">)</span>
+            <span class="nb">getattr</span><span class="p">(</span><span class="n">ax</span><span class="p">,</span> <span class="n">l</span><span class="p">)</span><span class="o">.</span><span class="n">set_major_formatter</span><span class="p">(</span><span class="n">fm</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="FigureManager.plot_examples"><a class="viewcode-back" href="../../code.html#great.utils.FigureManager.plot_examples">[docs]</a>    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">plot_examples</span><span class="p">():</span>
+        <span class="n">x</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span><span class="p">)</span>
+        <span class="n">offsets</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="n">endpoint</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+        <span class="c1"># Create array with shifted-sine curve along each column</span>
+        <span class="n">yy</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">transpose</span><span class="p">([</span><span class="n">np</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">x</span> <span class="o">+</span> <span class="n">phi</span><span class="p">)</span> <span class="k">for</span> <span class="n">phi</span> <span class="ow">in</span> <span class="n">offsets</span><span class="p">])</span>
+
+        <span class="n">plt</span><span class="o">.</span><span class="n">rc</span><span class="p">(</span><span class="s1">&#39;lines&#39;</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">4</span><span class="p">)</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">rc</span><span class="p">(</span><span class="s1">&#39;axes&#39;</span><span class="p">,</span> <span class="n">prop_cycle</span><span class="o">=</span><span class="p">(</span><span class="n">cycler</span><span class="p">(</span><span class="s1">&#39;color&#39;</span><span class="p">,</span> <span class="p">[</span><span class="s1">&#39;r&#39;</span><span class="p">,</span> <span class="s1">&#39;g&#39;</span><span class="p">,</span> <span class="s1">&#39;b&#39;</span><span class="p">,</span> <span class="s1">&#39;y&#39;</span><span class="p">])</span> <span class="o">+</span>
+                                   <span class="n">cycler</span><span class="p">(</span><span class="s1">&#39;linestyle&#39;</span><span class="p">,</span> <span class="p">[</span><span class="s1">&#39;-&#39;</span><span class="p">,</span> <span class="s1">&#39;--&#39;</span><span class="p">,</span> <span class="s1">&#39;:&#39;</span><span class="p">,</span> <span class="s1">&#39;-.&#39;</span><span class="p">])))</span>
+        <span class="n">fig</span><span class="p">,</span> <span class="p">(</span><span class="n">ax0</span><span class="p">,</span> <span class="n">ax1</span><span class="p">)</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="n">nrows</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+        <span class="n">ax0</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">yy</span><span class="p">)</span>
+        <span class="n">ax0</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s1">&#39;Set default color cycle to rgby&#39;</span><span class="p">)</span>
+
+        <span class="n">ax1</span><span class="o">.</span><span class="n">set_prop_cycle</span><span class="p">(</span><span class="n">cycler</span><span class="p">(</span><span class="s1">&#39;color&#39;</span><span class="p">,</span> <span class="p">[</span><span class="s1">&#39;c&#39;</span><span class="p">,</span> <span class="s1">&#39;m&#39;</span><span class="p">,</span> <span class="s1">&#39;y&#39;</span><span class="p">,</span> <span class="s1">&#39;k&#39;</span><span class="p">])</span> <span class="o">+</span>
+                           <span class="n">cycler</span><span class="p">(</span><span class="s1">&#39;lw&#39;</span><span class="p">,</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">])</span> <span class="o">+</span> <span class="n">cycler</span><span class="p">(</span><span class="s1">&#39;linestyle&#39;</span><span class="p">,</span> <span class="p">[</span><span class="s1">&#39;-&#39;</span><span class="p">,</span> <span class="s1">&#39;--&#39;</span><span class="p">,</span> <span class="s1">&#39;:&#39;</span><span class="p">,</span> <span class="s1">&#39;-.&#39;</span><span class="p">]))</span>
+        <span class="n">ax1</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">yy</span><span class="p">)</span>
+        <span class="n">ax1</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s1">&#39;Set axes color cycle to cmyk&#39;</span><span class="p">)</span>
+
+        <span class="c1"># Tweak spacing between subplots to prevent labels from overlapping</span>
+        <span class="n">fig</span><span class="o">.</span><span class="n">subplots_adjust</span><span class="p">(</span><span class="n">hspace</span><span class="o">=</span><span class="mf">0.3</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="FigureManager.formatter_examples"><a class="viewcode-back" href="../../code.html#great.utils.FigureManager.formatter_examples">[docs]</a>    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">formatter_examples</span><span class="p">():</span>
+        <span class="n">smfig</span> <span class="o">=</span> <span class="n">FigureManager</span><span class="p">(</span><span class="n">color_mode</span><span class="o">=</span><span class="s1">&#39;col&#39;</span><span class="p">)</span>
+
+        <span class="n">f</span><span class="p">,</span> <span class="n">ax</span> <span class="o">=</span> <span class="n">smfig</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="mi">3</span><span class="p">,</span> <span class="p">(</span><span class="mi">12</span><span class="p">,</span><span class="mi">4</span><span class="p">))</span>
+        <span class="n">a1</span><span class="p">,</span> <span class="n">a2</span><span class="p">,</span> <span class="n">a3</span> <span class="o">=</span> <span class="n">ax</span><span class="o">.</span><span class="n">flat</span>
+        <span class="n">xs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="o">-</span><span class="mf">1e-2</span><span class="p">,</span> <span class="mf">1e-2</span><span class="p">,</span> <span class="mi">10000</span><span class="p">)</span>
+        <span class="n">a1</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">xs</span><span class="p">,</span> <span class="n">xs</span> <span class="o">*</span> <span class="n">xs</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="mi">1</span><span class="o">/</span><span class="n">xs</span><span class="p">),</span> <span class="n">lw</span><span class="o">=</span><span class="mf">0.25</span><span class="p">)</span>
+        <span class="n">a1</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="n">lw</span><span class="o">=</span><span class="mf">0.25</span><span class="p">)</span>
+
+        <span class="n">FigureManager</span><span class="o">.</span><span class="n">easy_formatter</span><span class="p">(</span><span class="n">a2</span><span class="p">,</span> <span class="s1">&#39;b&#39;</span><span class="p">,</span> <span class="s1">&#39;eng&#39;</span><span class="p">)</span>
+        <span class="n">a2</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">xs</span><span class="p">,</span> <span class="n">xs</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="mi">1</span><span class="o">/</span><span class="n">xs</span><span class="p">),</span> <span class="n">lw</span><span class="o">=</span><span class="mf">0.25</span><span class="p">)</span>
+        <span class="n">a2</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="n">lw</span><span class="o">=</span><span class="mf">0.25</span><span class="p">)</span>
+
+        <span class="n">FigureManager</span><span class="o">.</span><span class="n">easy_formatter</span><span class="p">(</span><span class="n">a3</span><span class="p">,</span> <span class="s1">&#39;b&#39;</span><span class="p">,</span> <span class="s1">&#39;sci&#39;</span><span class="p">,</span> <span class="n">power_range</span><span class="o">=</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">))</span>
+        <span class="n">a3</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">xs</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="mi">1</span><span class="o">/</span><span class="n">xs</span><span class="p">),</span> <span class="n">lw</span><span class="o">=</span><span class="mf">0.25</span><span class="p">)</span>
+        <span class="n">a3</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="n">lw</span><span class="o">=</span><span class="mf">0.25</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">f</span><span class="p">,</span> <span class="n">ax</span></div></div>
+
+
+<div class="viewcode-block" id="GreatMagics"><a class="viewcode-back" href="../../code.html#great.utils.GreatMagics">[docs]</a><span class="nd">@magics_class</span>
+<span class="k">class</span> <span class="nc">GreatMagics</span><span class="p">(</span><span class="n">Magics</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Note: GreatMagics looks for a global variable smfig = FigureManager()</span>
+
+<span class="sd">    https://mlexplained.com/2017/12/28/creating-custom-magic-commands-in-jupyter/</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="GreatMagics.sf"><a class="viewcode-back" href="../../code.html#great.utils.GreatMagics.sf">[docs]</a>    <span class="nd">@cell_magic</span>
+    <span class="k">def</span> <span class="nf">sf</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">line</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="p">,</span> <span class="n">cell</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        s[m]f[ig] nr nc [w h] [v] [k ...</span>
+<span class="sd">            nr x nc layout</span>
+<span class="sd">            w x h of individual plots</span>
+<span class="sd">            v = verbose, prepend the magically added coded</span>
+<span class="sd">            k .... keyword args passed to smfig, e.g., sharex, sharey, etc.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="n">ww</span><span class="p">,</span> <span class="n">hh</span> <span class="o">=</span> <span class="mi">4</span><span class="p">,</span> <span class="mf">3.25</span>
+        <span class="n">verbose</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="c1"># for local use... called from sf11</span>
+        <span class="n">__return__</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="n">kwargs</span> <span class="o">=</span> <span class="s1">&#39;&#39;</span>
+        <span class="k">if</span> <span class="n">line</span> <span class="o">!=</span> <span class="s1">&#39;&#39;</span> <span class="ow">and</span> <span class="n">line</span><span class="o">.</span><span class="n">find</span><span class="p">(</span><span class="s1">&#39;k&#39;</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">pos</span> <span class="o">=</span> <span class="n">line</span><span class="o">.</span><span class="n">find</span><span class="p">(</span><span class="s1">&#39;k&#39;</span><span class="p">)</span>
+            <span class="n">kwargs</span> <span class="o">=</span> <span class="n">line</span><span class="p">[</span><span class="n">pos</span><span class="o">+</span><span class="mi">1</span><span class="p">:]</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
+            <span class="n">line</span> <span class="o">=</span> <span class="n">line</span><span class="p">[:</span><span class="n">pos</span><span class="p">]</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">line</span> <span class="o">!=</span> <span class="s1">&#39;&#39;</span> <span class="ow">and</span> <span class="n">line</span><span class="o">.</span><span class="n">find</span><span class="p">(</span><span class="s1">&#39;__return__&#39;</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">__return__</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="k">if</span> <span class="n">line</span> <span class="o">!=</span> <span class="s1">&#39;&#39;</span> <span class="ow">and</span> <span class="n">line</span><span class="o">.</span><span class="n">find</span><span class="p">(</span><span class="s1">&#39;v&#39;</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">verbose</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="n">line</span> <span class="o">=</span> <span class="n">line</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s1">&#39;v&#39;</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">line</span> <span class="o">!=</span> <span class="s1">&#39;&#39;</span><span class="p">:</span>
+            <span class="n">ls</span> <span class="o">=</span> <span class="n">line</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s1">&#39;,&#39;</span><span class="p">,</span> <span class="s1">&#39; &#39;</span><span class="p">)</span><span class="o">.</span><span class="n">split</span><span class="p">()</span>
+            <span class="n">nr</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">ls</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+            <span class="n">nc</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">ls</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">ls</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">2</span><span class="p">:</span>
+                <span class="n">ww</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">ls</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span>
+                <span class="n">hh</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">ls</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">nr</span><span class="p">,</span> <span class="n">nc</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span>
+
+        <span class="n">w</span> <span class="o">=</span> <span class="n">nc</span> <span class="o">*</span> <span class="n">ww</span>
+        <span class="n">h</span> <span class="o">=</span> <span class="n">nr</span> <span class="o">*</span> <span class="n">hh</span>
+
+        <span class="k">if</span> <span class="n">nr</span> <span class="o">*</span> <span class="n">nc</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">ax</span> <span class="o">=</span> <span class="s1">&#39;ax = ax0 = axs</span><span class="se">\n</span><span class="s1">axs = np.array([axs])</span><span class="se">\n</span><span class="s1">&#39;</span>
+            <span class="n">s</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;f, axs = smfig(</span><span class="si">{</span><span class="n">nr</span><span class="si">}</span><span class="s1">, </span><span class="si">{</span><span class="n">nc</span><span class="si">}</span><span class="s1">, (</span><span class="si">{</span><span class="n">w</span><span class="si">}</span><span class="s1">, </span><span class="si">{</span><span class="n">h</span><span class="si">}</span><span class="s1">), </span><span class="si">{</span><span class="n">kwargs</span><span class="si">}</span><span class="s1">)</span><span class="se">\n</span><span class="si">{</span><span class="n">ax</span><span class="si">}</span><span class="se">\n\n</span><span class="si">{</span><span class="n">cell</span><span class="si">}</span><span class="s1">&#39;</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">ax</span> <span class="o">=</span> <span class="s2">&quot;,&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="sa">f</span><span class="s1">&#39;ax</span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s1">&#39;</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">nr</span><span class="o">*</span><span class="n">nc</span><span class="p">)])</span> <span class="o">+</span> <span class="s1">&#39; = axs.flat&#39;</span>
+            <span class="n">axi</span> <span class="o">=</span> <span class="s2">&quot;axi = iter(axs.flat)&quot;</span>
+            <span class="n">s</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;f, axs = smfig(</span><span class="si">{</span><span class="n">nr</span><span class="si">}</span><span class="s1">, </span><span class="si">{</span><span class="n">nc</span><span class="si">}</span><span class="s1">, (</span><span class="si">{</span><span class="n">w</span><span class="si">}</span><span class="s1">, </span><span class="si">{</span><span class="n">h</span><span class="si">}</span><span class="s1">), </span><span class="si">{</span><span class="n">kwargs</span><span class="si">}</span><span class="s1">)</span><span class="se">\n</span><span class="si">{</span><span class="n">ax</span><span class="si">}</span><span class="se">\n</span><span class="si">{</span><span class="n">axi</span><span class="si">}</span><span class="se">\n\n</span><span class="si">{</span><span class="n">cell</span><span class="si">}</span><span class="s1">&#39;</span>
+        <span class="k">if</span> <span class="n">verbose</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="n">s</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">__return__</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">s</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">shell</span><span class="o">.</span><span class="n">ex</span><span class="p">(</span><span class="n">s</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="GreatMagics.sf1"><a class="viewcode-back" href="../../code.html#great.utils.GreatMagics.sf1">[docs]</a>    <span class="nd">@cell_magic</span>
+    <span class="k">def</span> <span class="nf">sf1</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">line</span><span class="p">,</span> <span class="n">cell</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        a single 1 x 1 plot</span>
+<span class="sd">        %%sf11 6</span>
+<span class="sd">        makes a 1 1 6 6 plot etc.</span>
+<span class="sd">        that is the only arg allowed</span>
+
+<span class="sd">        :param line:</span>
+<span class="sd">        :param cell:</span>
+<span class="sd">        :return:</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;DEPRECATED</span><span class="se">\n</span><span class="s1">&#39;</span><span class="o">*</span><span class="mi">10</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">line</span> <span class="o">==</span> <span class="s1">&#39;&#39;</span><span class="p">:</span>
+            <span class="n">line</span> <span class="o">=</span> <span class="mi">6</span>
+        <span class="n">s</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">sf</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;1 1 </span><span class="si">{</span><span class="n">line</span><span class="si">}</span><span class="s1"> </span><span class="si">{</span><span class="n">line</span><span class="si">}</span><span class="s1"> __return__&#39;</span><span class="p">,</span> <span class="n">cell</span><span class="p">)</span>
+        <span class="n">s</span> <span class="o">+=</span> <span class="s1">&#39;ax0.grid(lw=0.25)</span><span class="se">\n</span><span class="s1">ax0.axis([-.025, 1.025, -0.025, 1.025])</span><span class="se">\n</span><span class="s1">&#39;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">shell</span><span class="o">.</span><span class="n">ex</span><span class="p">(</span><span class="n">s</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="GreatMagics.smcsv"><a class="viewcode-back" href="../../code.html#great.utils.GreatMagics.smcsv">[docs]</a>    <span class="nd">@cell_magic</span>
+    <span class="nd">@magic_arguments</span><span class="p">()</span>
+    <span class="nd">@argument</span><span class="p">(</span><span class="s1">&#39;-o&#39;</span><span class="p">,</span> <span class="s1">&#39;--output&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;Output variable name &#39;</span><span class="p">)</span>
+    <span class="nd">@argument</span><span class="p">(</span><span class="s1">&#39;-t&#39;</span><span class="p">,</span> <span class="s1">&#39;--tab&#39;</span><span class="p">,</span> <span class="n">action</span><span class="o">=</span><span class="s1">&#39;store_true&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;tab separated &#39;</span><span class="p">)</span>
+    <span class="k">def</span> <span class="nf">smcsv</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">line</span><span class="p">,</span> <span class="n">cell</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Parse csv stream into DataFrame</span>
+
+
+<span class="sd">        :param line:</span>
+<span class="sd">        :param cell:</span>
+<span class="sd">        :return:</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">args</span> <span class="o">=</span> <span class="n">parse_argstring</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">smcsv</span><span class="p">,</span> <span class="n">line</span><span class="p">)</span>
+        <span class="n">sio</span> <span class="o">=</span> <span class="n">StringIO</span><span class="p">(</span><span class="n">cell</span><span class="p">)</span>
+        <span class="n">sep</span> <span class="o">=</span> <span class="p">(</span><span class="s1">&#39;</span><span class="se">\t</span><span class="s1">&#39;</span> <span class="k">if</span> <span class="n">args</span><span class="o">.</span><span class="n">tab</span> <span class="k">else</span> <span class="s1">&#39;,&#39;</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="n">sep</span><span class="o">==</span><span class="s1">&#39;</span><span class="se">\t</span><span class="s1">&#39;</span><span class="p">)</span>
+        <span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="n">sio</span><span class="p">,</span> <span class="n">sep</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">args</span><span class="o">.</span><span class="n">output</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">df</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">shell</span><span class="o">.</span><span class="n">user_ns</span><span class="p">[</span><span class="n">args</span><span class="o">.</span><span class="n">output</span><span class="p">]</span> <span class="o">=</span> <span class="n">df</span>
+            <span class="k">return</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">df</span><span class="p">)</span><span class="si">}</span><span class="s1"> rows stored in variable </span><span class="si">{</span><span class="n">args</span><span class="o">.</span><span class="n">output</span><span class="si">}</span><span class="s1">&#39;</span></div>
+
+<div class="viewcode-block" id="GreatMagics.sdir"><a class="viewcode-back" href="../../code.html#great.utils.GreatMagics.sdir">[docs]</a>    <span class="nd">@line_magic</span>
+    <span class="k">def</span> <span class="nf">sdir</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">line</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        run sdir on the object in line, if &#39;&#39; returns self</span>
+<span class="sd">        e.g., %sdir shell to run on shell to see what shell can do.</span>
+<span class="sd">        %sdir to see what objects are available</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">line</span><span class="o">==</span><span class="s1">&#39;&#39;</span><span class="p">:</span>
+            <span class="n">x</span> <span class="o">=</span> <span class="bp">self</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">x</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">line</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">x</span><span class="p">:</span>
+            <span class="n">ml</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="nb">map</span><span class="p">(</span><span class="nb">len</span><span class="p">,</span> <span class="nb">dir</span><span class="p">(</span><span class="n">x</span><span class="p">)))</span>
+            <span class="n">fs</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="se">{{</span><span class="s1">i:&lt;</span><span class="si">{</span><span class="n">ml</span><span class="si">}</span><span class="s1">s</span><span class="se">}}</span><span class="s1">&#39;</span>
+            <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;</span><span class="se">\t</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="n">fs</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">i</span><span class="o">=</span><span class="n">i</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">dir</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="k">if</span> <span class="n">i</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">!=</span> <span class="s1">&#39;_&#39;</span><span class="p">]))</span></div>
+
+<div class="viewcode-block" id="GreatMagics.help"><a class="viewcode-back" href="../../code.html#great.utils.GreatMagics.help">[docs]</a>    <span class="nd">@line_cell_magic</span>
+    <span class="k">def</span> <span class="nf">help</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">line</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="p">,</span> <span class="n">cell</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot; load the help message as executable &quot;&quot;&quot;</span>
+        <span class="n">s</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;# </span><span class="si">%he</span><span class="s2">lp</span>
+<span class="s2"># pandas EngFormatter set with 3dp, change using</span>
+<span class="s2">pd.set_option(&quot;display.float_format&quot;, EngFormatter(3, True))</span>
+<span class="s2">agg_logger_level(10) </span>
+<span class="s2">steps_helper() describing drawstyle</span>
+<span class="s2">grt.now()</span>
+<span class="si">%c</span><span class="s2">onfig InlineBackend.figure_format = &#39;svg&#39;</span>
+<span class="si">%lo</span><span class="s2">ad_ext autoreload</span>
+<span class="si">%a</span><span class="s2">utoreload 2&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">shell</span><span class="o">.</span><span class="n">set_next_input</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="n">replace</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span></div></div>
+
+
+<span class="n">ip</span> <span class="o">=</span> <span class="n">get_ipython</span><span class="p">()</span>
+<span class="k">if</span> <span class="n">ip</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="n">ip</span><span class="o">.</span><span class="n">register_magics</span><span class="p">(</span><span class="n">GreatMagics</span><span class="p">)</span>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Stephen J Mildenhall.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
