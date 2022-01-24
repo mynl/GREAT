@@ -481,7 +481,10 @@ class PresentationManager(object):
         :return:
         """
         prefix = ''
-        if self.top_name != '':
+        if self.top_value == 'no numbers':
+            self.section += 1
+            return '', self.section
+        elif self.top_name != '':
             # prefix = f'{self.top_name} {self.top_value}'
             prefix = f'{self.raw_top_value}.'
         # not sure this is a good idea...with versions it intros trivial differences
@@ -944,7 +947,7 @@ class PresentationManager(object):
         # new SIO each time for contents...
         self.sios['contents'] = StringIO()
 
-        if len(self.toc) == 0:
+        if len(self.toc) == 0 or self['has_toc'] is False:
             return
 
         # there are no sections in the summary (section is # level)

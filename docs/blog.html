@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="" xml:lang="">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <meta name="author" content="Stephen J. Mildenhall" />
+  <title>Blog</title>
+  <style>
+    html {
+      line-height: 1.5;
+      font-family: Georgia, serif;
+      font-size: 20px;
+      color: #1a1a1a;
+      background-color: #fdfdfd;
+    }
+    body {
+      margin: 0 auto;
+      max-width: 36em;
+      padding-left: 50px;
+      padding-right: 50px;
+      padding-top: 50px;
+      padding-bottom: 50px;
+      hyphens: auto;
+      overflow-wrap: break-word;
+      text-rendering: optimizeLegibility;
+      font-kerning: normal;
+    }
+    @media (max-width: 600px) {
+      body {
+        font-size: 0.9em;
+        padding: 1em;
+      }
+    }
+    @media print {
+      body {
+        background-color: transparent;
+        color: black;
+        font-size: 12pt;
+      }
+      p, h2, h3 {
+        orphans: 3;
+        widows: 3;
+      }
+      h2, h3, h4 {
+        page-break-after: avoid;
+      }
+    }
+    p {
+      margin: 1em 0;
+    }
+    a {
+      color: #1a1a1a;
+    }
+    a:visited {
+      color: #1a1a1a;
+    }
+    img {
+      max-width: 100%;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 1.4em;
+    }
+    h5, h6 {
+      font-size: 1em;
+      font-style: italic;
+    }
+    h6 {
+      font-weight: normal;
+    }
+    ol, ul {
+      padding-left: 1.7em;
+      margin-top: 1em;
+    }
+    li > ol, li > ul {
+      margin-top: 0;
+    }
+    blockquote {
+      margin: 1em 0 1em 1.7em;
+      padding-left: 1em;
+      border-left: 2px solid #e6e6e6;
+      color: #606060;
+    }
+    code {
+      font-family: Menlo, Monaco, 'Lucida Console', Consolas, monospace;
+      font-size: 85%;
+      margin: 0;
+    }
+    pre {
+      margin: 1em 0;
+      overflow: auto;
+    }
+    pre code {
+      padding: 0;
+      overflow: visible;
+      overflow-wrap: normal;
+    }
+    .sourceCode {
+     background-color: transparent;
+     overflow: visible;
+    }
+    hr {
+      background-color: #1a1a1a;
+      border: none;
+      height: 1px;
+      margin: 1em 0;
+    }
+    table {
+      margin: 1em 0;
+      border-collapse: collapse;
+      width: 100%;
+      overflow-x: auto;
+      display: block;
+      font-variant-numeric: lining-nums tabular-nums;
+    }
+    table caption {
+      margin-bottom: 0.75em;
+    }
+    tbody {
+      margin-top: 0.5em;
+      border-top: 1px solid #1a1a1a;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    th {
+      border-top: 1px solid #1a1a1a;
+      padding: 0.25em 0.5em 0.25em 0.5em;
+    }
+    td {
+      padding: 0.125em 0.5em 0.25em 0.5em;
+    }
+    header {
+      margin-bottom: 4em;
+      text-align: center;
+    }
+    #TOC li {
+      list-style: none;
+    }
+    #TOC a:not(:hover) {
+      text-decoration: none;
+    }
+    code{white-space: pre-wrap;}
+    span.smallcaps{font-variant: small-caps;}
+    span.underline{text-decoration: underline;}
+    div.column{display: inline-block; vertical-align: top; width: 50%;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    ul.task-list{list-style: none;}
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  </style>
+  <!--[if lt IE 9]>
+    <script src="//cdnjs.cloudflare.com/ajax/libs/html5shiv/3.7.3/html5shiv-printshiv.min.js"></script>
+  <![endif]-->
+</head>
+<body>
+<header id="title-block-header">
+<h1 id="what-is-the-most-informative-first-wordle-word">What Is the Most Informative First Wordle Word?</h1>
+<p class="author">Stephen J. Mildenhall</p>
+<p class="date">Created 2022-01-23 20:40:07</p>
+</header>
+<!--
+<a target="_blank" href='https://powerlanguage.co.uk/wordle/'>Wordle</a>
+is a popular word game. It gives you six chances to guess a five-letter word.
+For each guess, you are learn how many letters are in the right place, and how many are in the word but in a different
+place. For example, if the unknown word is `sound` and you guess `doubt`, you learn that `o` is the second letter and that
+the word contains `d`, but it is not the first letter. You also learn that the word does not contain `u`, `b`, or `t`.
+-->
+<p><a target="_blank" href='https://powerlanguage.co.uk/wordle/'>Wordle</a> is a popular word game. It gives you six chances to guess a five-letter word. For each guess, you are learn how many letters are in the right place, and how many are in the word but in a different place. For example, if the unknown word is</p>
+<ul>
+<li><code>sound</code></li>
+</ul>
+<p>and you guess</p>
+<ul>
+<li><code>doubt</code></li>
+</ul>
+<p>then you learn that the unknown word</p>
+<ul>
+<li>has second letter <code>o</code>,</li>
+<li>contains <code>d</code>, but it is not the first letter, and</li>
+<li>does not contain <code>u</code>, <code>b</code>, or <code>t</code>.</li>
+</ul>
+<h2 id="what-is-the-most-informative-first-word-to-guess">What is the most informative first word to guess?</h2>
+<p>To model a solution, assume that the unknown word <span class="math inline"><em>W</em></span> is selected from a set of possible words <span class="math inline">𝒲</span>. If you guess <span class="math inline"><em>g</em> ∈ 𝒲</span>, then you learn that <span class="math inline"><em>W</em></span> is in a subset <span class="math inline">𝒲(<em>g</em>,<em>W</em>) ⊂ 𝒲</span> of consistent words. An <strong>informative</strong> guess is one where <span class="math inline">𝒲(<em>g</em>,<em>W</em>)</span> is small for <em>any</em> unknown <span class="math inline"><em>W</em></span>. You could guess <span class="math inline"><em>g</em> = <em>W</em></span>, in which case there is just one consistent word. But generally, you will not be so lucky, and there will still be many possible answers after your first guess.</p>
+<p>Guessing <code>fuzzy</code>, which contains a rare letter and uses only four distinct letters, generally (for most <span class="math inline"><em>W</em></span>) won’t narrow down the set of possible answers by much. It is a uninformative starting guess. <!-- because `fuzzy` does not contain much information and $\mathcal{W}(\mathrm{fuzzy}, W)$
+tends to be large. --> On the other hand, guessing <code>their</code> reveals more information: it contains five common letters, and the set of consistent words will usually be smaller.</p>
+<p>The average size of <span class="math inline">𝒲(<em>g</em>,<em>W</em>)</span> over all unknown <span class="math inline"><em>W</em></span> is a measure of the information in the guess <span class="math inline"><em>g</em></span>. In symbols, define the quality of the guess <span class="math inline"><em>g</em></span> as <span class="math display"><em>q</em>(<em>g</em>) = E<sub><em>W</em></sub>[|𝒲(<em>g</em>,<em>W</em>)|],</span> where <span class="math inline">E<sub><em>W</em></sub></span> denotes the average across all unknown <span class="math inline"><em>W</em></span>, and <span class="math inline">|𝒲(<em>g</em>,<em>W</em>)|</span> is the number of consistent words. <strong>The most informative possible word is the one with the lowest <span class="math inline"><em>q</em></span>.</strong></p>
+<p>Computing <span class="math inline"><em>q</em>(<em>g</em>)</span> involves three steps. Given the guess <span class="math inline"><em>g</em></span>:</p>
+<ol type="1">
+<li>For each possible actual word <span class="math inline"><em>W</em></span>, determine which letters of <span class="math inline"><em>g</em></span> are in the right place, which are included but in the wrong place, and which are excluded.</li>
+<li>Count how many words <span class="math inline"><em>W</em>′ ⊂ 𝒲</span> are consistent with the information in 1, giving <span class="math inline">|𝒲(<em>g</em>,<em>W</em>)|</span>.</li>
+<li>Average step 2 across all unknown <span class="math inline"><em>W</em></span> to compute <span class="math inline"><em>q</em>(<em>g</em>)</span></li>
+</ol>
+<p>If <span class="math inline">𝒲</span> contains <span class="math inline"><em>n</em></span> words, each of these steps involves an order of <span class="math inline"><em>n</em></span> operations, giving <span class="math inline"><em>n</em><sup>3</sup></span> in all. Computing <span class="math inline"><em>g</em></span> is very computationally intensive.</p>
+<p>Here are the ten most informative first Wordle words based on a collection of 2,837 five-letter words (word list Match 12 from <a target="_blank" href='https://www.mynl.com/words#wordlist'>mynl.com</a>).</p>
+<table>
+<thead>
+<tr class="header">
+<th style="text-align: left;">Guess <span class="math inline"><em>g</em></span></th>
+<th style="text-align: right;">Mean <span class="math inline"><em>q</em>(<em>g</em>)</span></th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">arise</td>
+<td style="text-align: right;">251</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">raise</td>
+<td style="text-align: right;">251</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">arose</td>
+<td style="text-align: right;">266</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">aries</td>
+<td style="text-align: right;">272</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">aisle</td>
+<td style="text-align: right;">286</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">stare</td>
+<td style="text-align: right;">297</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">tesla</td>
+<td style="text-align: right;">301</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">aster</td>
+<td style="text-align: right;">302</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">least</td>
+<td style="text-align: right;">302</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">laser</td>
+<td style="text-align: right;">303</td>
+</tr>
+</tbody>
+</table>
+<p>These words are substantially better than an average guess, which has a mean nearly three times higher: 746. Mean has a standard deviation of 260. The ten worst words are in the next table.</p>
+<table>
+<thead>
+<tr class="header">
+<th style="text-align: left;">Guess <span class="math inline"><em>g</em></span></th>
+<th style="text-align: right;">Mean <span class="math inline"><em>q</em>(<em>g</em>)</span></th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">huffy</td>
+<td style="text-align: right;">1711</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">bobby</td>
+<td style="text-align: right;">1724</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">jazzy</td>
+<td style="text-align: right;">1733</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">buggy</td>
+<td style="text-align: right;">1749</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">jiffy</td>
+<td style="text-align: right;">1753</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">fluff</td>
+<td style="text-align: right;">1777</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">puppy</td>
+<td style="text-align: right;">1882</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">mummy</td>
+<td style="text-align: right;">1895</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">yummy</td>
+<td style="text-align: right;">1895</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">fuzzy</td>
+<td style="text-align: right;">1978</td>
+</tr>
+</tbody>
+</table>
+<p>The less informative starting words contain rare letters and doubles.</p>
+<p>Here is the distribution of means across all words.</p>
+<figure>
+<img src="img/blog-no%20numbers-histogram.png" alt="Histogram of the average number of consistent words, across all first word guesses. " /><figcaption aria-hidden="true">Histogram of the average number of consistent words, across all first word guesses. </figcaption>
+</figure>
+<p>The histogram shows that words like <code>arise</code> are significantly better than a random guess. They are in the extreme left tail of the distribution.</p>
+<h2 id="a-shortcut">A shortcut </h2>
+<p>Computing the exact most informative Wordle word is very time-consuming. Is there a shortcut? Words made out of letters that occur more frequently in <span class="math inline">𝒲</span> should contain more information, suggesting scoring words by letter frequency. Implementing this approach and comparing the resulting score to the exact mean gives the following plot. The three-color groups correspond to the number of distinct letters: yellow dots correspond to words with five distinct letters, green to four, and purple to three.</p>
+<p>The graph shows that <code>score</code> is a reasonable proxy for the exact <span class="math inline"><em>q</em></span>.</p>
+<figure>
+<img src="img/blog-no%20numbers-mean-score-correlation.png" alt="Comparison of mean and score measures of word guess information. Yellow dots are guesses with five distinct letters, green four, and blue three. " /><figcaption aria-hidden="true">Comparison of mean and score measures of word guess information. Yellow dots are guesses with five distinct letters, green four, and blue three. </figcaption>
+</figure>
+<p>Words with four distinct letters score higher because they can double up the most common letters. Overall, <code>eases</code> has the highest word-frequency score, 7,181, but its mean is 642.</p>
+<p>Here are the top ten outcomes sorted by score, using five letter words.</p>
+<table>
+<thead>
+<tr class="header">
+<th style="text-align: left;">Guess <span class="math inline"><em>g</em></span></th>
+<th style="text-align: right;">Mean <span class="math inline"><em>q</em>(<em>g</em>)</span></th>
+<th style="text-align: right;">Letters</th>
+<th style="text-align: right;">Letter Score</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">arose</td>
+<td style="text-align: right;">266</td>
+<td style="text-align: right;">5</td>
+<td style="text-align: right;">6,127</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">raise</td>
+<td style="text-align: right;">251</td>
+<td style="text-align: right;">5</td>
+<td style="text-align: right;">6,041</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">arise</td>
+<td style="text-align: right;">251</td>
+<td style="text-align: right;">5</td>
+<td style="text-align: right;">6,041</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">aries</td>
+<td style="text-align: right;">272</td>
+<td style="text-align: right;">5</td>
+<td style="text-align: right;">6,041</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">stare</td>
+<td style="text-align: right;">297</td>
+<td style="text-align: right;">5</td>
+<td style="text-align: right;">6,039</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">rates</td>
+<td style="text-align: right;">329</td>
+<td style="text-align: right;">5</td>
+<td style="text-align: right;">6,039</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">tears</td>
+<td style="text-align: right;">315</td>
+<td style="text-align: right;">5</td>
+<td style="text-align: right;">6,039</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">aster</td>
+<td style="text-align: right;">302</td>
+<td style="text-align: right;">5</td>
+<td style="text-align: right;">6,039</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">earls</td>
+<td style="text-align: right;">316</td>
+<td style="text-align: right;">5</td>
+<td style="text-align: right;">6,020</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">laser</td>
+<td style="text-align: right;">303</td>
+<td style="text-align: right;">5</td>
+<td style="text-align: right;">6,020</td>
+</tr>
+</tbody>
+</table>
+<p>The top-ten score list includes all top-ten mean words except <code>least</code>, (it substitutes <code>earls</code>). In practice, using the frequency-based score seems a reasonable substitute for the exact mean. Using scores remains practical for larger <span class="math inline">𝒲</span> than the exact method.</p>
+<h2 id="distributions">Distributions</h2>
+<figure>
+<img src="img/blog-no%20numbers-distribution-plots.png" alt="Distribution of the number of possible words across all first guesses." /><figcaption aria-hidden="true">Distribution of the number of possible words across all first guesses.</figcaption>
+</figure>
+<p>The graph above shows the distribution of the size of the possible set after one guess, across all guesses. After an optimal or near optimal first guess, there is an 80% chance that you rule out about 90% of words. The measure <span class="math inline"><em>q</em></span> is based on the mean, but other choices, such as a percentile could also be used.</p>
+<h2 id="bayes">Bayes</h2>
+<p>The most informative first word is an example of using Bayes’s Theorem. The prior distribution is uniform over <span class="math inline">𝒲</span>. After the first guess it is uniform over the smaller set <span class="math inline">𝒲(<em>g</em>,<em>W</em>)</span>. The model we have described could be extended to allow for the case where the unknown words are not selected randomly. An interesting question is to determine a rule for picking <span class="math inline"><em>W</em></span> that makes the puzzle the hardest to solve.</p>
+</body>
+</html>
