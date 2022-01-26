@@ -31,54 +31,36 @@ v 1.0 Dec 2020 created PresentationManager from DocMaker
 
 """
 
+import base64
+import datetime
+import hashlib
+import json
+import logging
 import os
+import re
 import sys
+from collections import OrderedDict
 from io import StringIO
 from pathlib import Path
-from matplotlib.pyplot import Figure
-import pandas as pd
-from .markdown_make import markdown_make_main
-import logging
-import re
+from pprint import PrettyPrinter
+
 import numpy as np
-import unicodedata
-from pandas.io.formats.format import EngFormatter
-import json
-from collections import OrderedDict
-# import subprocess
-# from platform import platform
-from IPython.display import Markdown, display
+import pandas as pd
+import pypandoc
+from IPython import get_ipython
 from IPython.core.magic import Magics, magics_class, line_magic, cell_magic, line_cell_magic
 from IPython.core.magic_arguments import argument, magic_arguments, parse_argstring
-from IPython import get_ipython
+from IPython.display import Markdown, display
+from matplotlib.pyplot import Figure
 from titlecase import titlecase
-import pypandoc
-from pprint import PrettyPrinter
-import datetime
-import base64
-import hashlib
 
-# import sys
-# import re
-# import subprocess
-# import pathlib
-# import struct
-# import numpy as np
-# import glob
-# import string
-# import unicodedata
+from .markdown_make import markdown_make_main
+from .maker import ManagerBase
 
 logger = logging.getLogger(__name__)
 
-# Size = dict(TINY = T = 300
-#     VSMALL = VS = 400
-#     SMALL = S = 500
-#     MEDIUM = M = 600
-#     LARGE = L = 700
-#     XLARGE = XL = 800
 
-
-class PresentationManager(object):
+class PresentationManager(ManagerBase):
     """
     Class level doc string...
 
@@ -213,7 +195,7 @@ class PresentationManager(object):
         self.fig_format = 'pdf'
         self.output_style = 'with_table'
         self.pdf_engine = ''
-        self.default_float_fmt = PresentationManager.default_float_format
+        self.default_float_fmt =ManagerBase.default_float_format
 
         self.unit = 1000
         self.capital_standard = 0.996
@@ -422,7 +404,6 @@ class PresentationManager(object):
         elif kind in ['net', 'n']:
             pp(self.config['net_portfolio'])
 
-
     def reset(self):
         """
         reset all buffers etc.
@@ -442,35 +423,6 @@ class PresentationManager(object):
         for k, (ln, d) in self['line_descriptions'].items():
             s += f'* `{k}`: {ln}{d}\n'
         return s
-
-    @property
-    def debug(self):
-        return self._debug
-
-    @debug.setter
-    def debug(self, value):
-        assert value in ('on', 'append', 'off', True, False)
-        # when this changes to on delete the old file; also acts as a reset
-        if value in ('on', 'append', 'off', True):
-            if self.debug_dm_file.exists():
-                self.debug_dm_file.unlink()
-        self._debug = value
-
-    @property
-    def active(self):
-        return self._active
-
-    @active.setter
-    def active(self, value):
-        self._active = value
-
-    @property
-    def tacit_override(self):
-        return self._tacit_override
-
-    @tacit_override.setter
-    def tacit_override(self, value):
-        self._tacit_override = value
 
     def section_number(self, buf):
         """
@@ -566,7 +518,7 @@ class PresentationManager(object):
         else:
             try:
                 f = f.get_figure()
-            except AttritbuteError as ae:
+            except AttributeError as ae:
                 logger.warning(f'Cannot coerce input object {f} into a figure...ignoring')
                 raise ae
 
@@ -642,14 +594,6 @@ class PresentationManager(object):
             f.write(body)
 
         return f'@@@include {filename}'
-
-    def make_label(self, label, option):
-        # prepend option id on label to avoid collisions
-        if option:
-            label = f'{self.option_id}-{label}'
-        label = self.make_safe_label(label)
-        label = self.clean_name(label)
-        return label
 
     def tikz_table(self, df, label, *, caption="", buf='body',
                    new_slide=True, tacit=False, promise=False,
@@ -776,76 +720,6 @@ class PresentationManager(object):
             if caption != '':
                 display(Markdown(caption))
 
-    @staticmethod
-    def default_float_format(x, neng=3):
-        """
-        the endless quest for the perfect float formatter...
-
-        tester::
-
-            for x in 1.123123982398324723947 * 10.**np.arange(-23, 23):
-                print(default_float_format(x))
-
-        :param x:
-        :return:
-        """
-        ef = EngFormatter(neng, True)
-        try:
-            if x == 0:
-                ans = '0'
-            elif 1e-3 <= abs(x) < 1e6:
-                if abs(x) <= 10:
-                    ans = f'{x:.3g}'
-                elif abs(x) < 100:
-                    ans = f'{x:,.2f}'
-                elif abs(x) < 1000:
-                    ans = f'{x:,.1f}'
-                else:
-                    ans = f'{x:,.0f}'
-            else:
-                ans = ef(x)
-            return ans
-        except:
-            return x
-
-    @staticmethod
-    def make_title(s):
-        """
-        make s into a slide title (label/title interoperability)
-
-        :param s:
-        :return:
-        """
-        # https://pypi.org/project/titlecase/#description
-        s = titlecase(s)  # .replace('-', ' '))
-        # from / to
-        # for f, t in zip(['Var ', 'Tvar ', 'Cv ', 'Vs ', 'Epd ', 'Lr ', 'Roe ', 'Cle ', 'Gdp', 'Gnp'],
-        #                 ['VaR ', 'TVaR ', 'CV ', 'vs. ', 'EPD ', 'LR ', 'ROE ', 'CLE ', 'GDP', 'GNP']):
-        #     s = s.replace(f, t)
-        return s
-
-    @staticmethod
-    def make_safe_label(label):
-
-        """
-        convert label to suitable for tex lable and file name statements
-
-        You can look at the Django framework for how they create a "slug" from arbitrary
-        text. A slug is URL- and filename- friendly.
-
-        The Django text utils define a function, slugify(), that's probably the gold standard
-        for this kind of thing. Essentially, their code is the following.
-
-        Normalizes string, converts to lowercase, removes non-alpha characters,
-        and converts spaces to hyphens.
-
-        https://stackoverflow.com/questions/295135/turn-a-string-into-a-valid-filename
-        """
-        value = unicodedata.normalize('NFKD', label)
-        value = re.sub(r'[^\w\s-]', '', value).strip().lower()
-        value = re.sub(r'[-\s]+', '-', value)
-        return value
-
     def _write_buffer_(self, buf, text='\n'):
         """
         single point to write to buffer, allows overloading of other write related functions, such as tracking toc
@@ -901,11 +775,6 @@ class PresentationManager(object):
             logger.info(f'Deleting {f}')
             f.unlink()
 
-    @staticmethod
-    def date():
-        return "Created {date:%Y-%m-%d %H:%M:%S}". \
-            format(date=datetime.datetime.now())
-
     def dump_toc(self):
         """
         save the toc as a json file
@@ -924,19 +793,6 @@ class PresentationManager(object):
             logger.warning(f'TOC file {self.key}-{self.top_value}toc.json not found.')
             toc = None
         return toc
-
-    def buffer(self, decorate=''):
-        """
-        assemble all the parts
-        :return:
-        """
-        # update toc
-        self.make_toc(decorate)
-        # assemble parts
-        s = '\n\n'.join(buf.getvalue().strip() for buf in self.sios.values())
-        # sublime text-esque removal of white space
-        s = re.sub(' *\n(\n?)\n*', r'\n\1', s, flags=re.MULTILINE)
-        return s
 
     def make_toc(self, decorate=''):
         """
@@ -969,9 +825,6 @@ class PresentationManager(object):
             else:
                 self.sios['contents'].write(
                     f'\n\\grttocentry{{{"Section" if s > 0 else "Appendix"} {t}.{s_}}}{{{c}}}')
-
-    def buffer_display(self):
-        display(Markdown(self.buffer()))
 
     def buffer_persist(self, font_size=9, tacit=False, mode='single', debug=False, debug_filename='dm2.md'):
         """
@@ -1093,70 +946,6 @@ class PresentationManager(object):
             # parallelize would be nice...
             logger.info(f'Processing {f}')
             self.make_beamer(f)
-
-    @staticmethod
-    def clean_name(n):
-        """
-        escape underscores for using a name in a DataFrame index
-
-        :param n:
-        :return:
-        """
-        try:
-            if type(n) == str:
-                # quote underscores that are not in dollars
-                return '$'.join((i if n % 2 else i.replace('_', '\\_') for n, i in enumerate(n.split('$'))))
-            else:
-                return n
-        except:
-            return n
-
-    @staticmethod
-    def clean_underscores(s):
-        """
-        check s for unescaped _s
-        returns true if all _ escaped else false
-        :param s:
-        :return:
-        """
-        return np.all([s[x.start() - 1] == '\\' for x in re.finditer('_', s)])
-
-    @staticmethod
-    def clean_index(df):
-        """
-        escape _ for columns and index
-        whether multi or not
-
-        !!! you can do this with a renamer...
-
-        :param df:
-        :return:
-        """
-
-        idx_names = df.index.names
-        col_names = df.columns.names
-
-        if isinstance(df.columns, pd.core.indexes.multi.MultiIndex):
-            df.columns = PresentationManager.clean_mindex_work(df.columns)
-        else:
-            df.columns = map(PresentationManager.clean_name, df.columns)
-
-        # index
-        if isinstance(df.index, pd.core.indexes.multi.MultiIndex):
-            df.index = PresentationManager.clean_mindex_work(df.index)
-        else:
-            df.index = map(PresentationManager.clean_name, df.index)
-        df.index.names = idx_names
-        df.columns.names = col_names
-        return df
-
-    @staticmethod
-    def clean_mindex_work(idx):
-        for i, lv in enumerate(idx.levels):
-            if lv.dtype == 'object':
-                repl = map(PresentationManager.clean_name, lv)
-                idx = idx.set_levels(repl, level=i)
-        return idx
 
     def make_beamer(self, path_file):
         """
@@ -1617,21 +1406,6 @@ class PresentationManager(object):
             f.write(yaml)
             dfl = df.copy().set_index('hash')
             f.write(dfl.loc[hash_list, :].content.str.cat())
-
-    def toggle_debug(self, onoff):
-        """
-        ``onoff == on``  set debug=True but remember previous state
-        ``onoff == off`` restore previous state
-        :param onoff:
-        :return:
-        """
-
-        if onoff == "on":
-            self._debug_state = self.debug
-            self.debug = True
-
-        elif onoff == 'off':
-            self.debug = self._debug_state
 
 
 @magics_class
