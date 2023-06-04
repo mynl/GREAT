@@ -1,0 +1,35 @@
+
+[project]
+name = "great"
+version = "1.0.0"
+description = "GREATools, only in Python"
+authors = [
+    {name = "Stephen. J Mildenhall", email = "steve@mynl.com"},
+]
+dependencies = [
+    "bibtexparser",
+    "cryptography",
+    "cycler",
+    "ipython",
+    "lxml",
+    "matplotlib",
+    "nltk",
+    "numpy",
+    "pandas",
+    "Pillow",
+    "pypandoc",
+    "pyperclip",
+    "Requests",
+    "titlecase",
+    "wordcloud",
+]
+requires-python = ">=3.8"
+readme = "README.md"
+license = {text = "BSD"}
+
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project.scripts]
+great-sc = "great.scripts:my_script"
