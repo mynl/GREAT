@@ -12,9 +12,7 @@
 #
 import os
 import sys
-# opa1 = os.path.abspath('.')
-# opa2 = os.path.abspath('../.')
-# print(opa1, opa2)
+
 sys.path.insert(0, os.path.abspath('../'))
 
 
@@ -33,8 +31,13 @@ release = '1.0.0'
 # Add any Sphinx extension module names here, as strings. They can be
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
-extensions = ["sphinx.ext.autodoc", "sphinx.ext.intersphinx", "sphinxarg.ext",
-              "sphinx.ext.viewcode", "myst_parser"]
+extensions = [
+    "sphinx.ext.autodoc",
+    "sphinx.ext.intersphinx",
+    # "sphinxarg.ext",
+    # "sphinx.ext.viewcode",
+    "myst_parser"
+    ]
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
