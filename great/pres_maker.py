@@ -803,7 +803,7 @@ class PresentationManager(ManagerBase):
         # new SIO each time for contents...
         self.sios['contents'] = StringIO()
 
-        if len(self.toc) == 0 or self['has_toc'] is False:
+        if len(self.toc) == 0:
             return
 
         # there are no sections in the summary (section is # level)
@@ -1435,7 +1435,7 @@ class PresentationManagerMagic(Magics):
         %%pmt -s -a -m  (s show; a=appendix, m=suMmary)
 
         """
-        self.shell.ex('if PM.debug: logger.warning(f"PM debug mode set to {PM.debug}")')
+        self.shell.ex('if PM.debug: print(f"PM debug mode set to {PM.debug}")')
         if cell is None:
             # defaults, tacit for everything except sections
             if line.strip()[0:2] == '# ':
@@ -1499,7 +1499,7 @@ class PresentationManagerMagic(Magics):
             many lines of caption text
             caption continues.
         """
-        self.shell.ex('if PM.debug: logger.warning(f"PM debug mode set to {PM.debug}")')
+        self.shell.ex('if PM.debug: print(f"PM debug mode set to {PM.debug}")')
         if cell:
             args = parse_argstring(self.pmf, line)
             if args.ignore:
@@ -1648,7 +1648,7 @@ class PresentationManagerMagic(Magics):
 
 
         """
-        self.shell.ex('if PM.debug: logger.warning(f"PM debug mode set to {PM.debug}")')
+        self.shell.ex('if PM.debug: print(f"PM debug mode set to {PM.debug}")')
         if cell:
             args = parse_argstring(self.pmt, line)
             if args.ignore:

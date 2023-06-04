@@ -16,3 +16,4 @@ from .simple_maker import SimpleManager
 from .markdown_make import markdown_make_main, md_summary
 from .watcher import Watcher
 from .image_tools import quilt
+from .word_tools import TextAnalyzer, WordClouder

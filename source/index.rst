@@ -11,5 +11,5 @@ Welcome to GREAT's documentation!
    :caption: Contents:
 
    intro.md
-   code.md
+   code.rst
 

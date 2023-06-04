@@ -13,6 +13,7 @@ v 1.0 Dec 2022 SimpleManager from PresentationManager
 
 """
 
+import sys
 import logging
 import re
 from collections import OrderedDict
@@ -39,7 +40,7 @@ class SimpleManager(ManagerBase):
     """
 
     def __init__(self, title, prefix, option_id='', base_dir='.', figure_dir='img',
-        table_dir='table_data', figure_format='png', dpi=600):
+        table_dir='table_data'):
         """
 
         :param title:
@@ -73,8 +74,6 @@ class SimpleManager(ManagerBase):
         self.table_dir.mkdir(parents=True, exist_ok=True)
 
         # admin
-        self.fig_format = figure_format
-        self.dpi = dpi
         self.default_float_fmt = SimpleManager.default_float_format
 
         # starts in base self.config: active and not in debug mode
@@ -107,7 +106,8 @@ class SimpleManager(ManagerBase):
             display(Markdown(txt))
 
     def figure(self, f, label, buf='body', caption="", width="", new_slide=False,
-               tacit=False, promise=False, option=True, **kwargs):
+               tacit=False, promise=False, option=True, figure_format='jpg',
+               dpi=600, **kwargs):
         """
         add a figure
 
@@ -143,15 +143,15 @@ class SimpleManager(ManagerBase):
         # adds the option id if option is true
         label = self.make_label(label, option)
         # label = self.make_safe_label(label)
-        fig_file = self.figure_dir / f'{self.prefix}-{label}.{self.fig_format}'
+        if self.prefix != '':
+            fig_file = self.figure_dir / f'{self.prefix}-{label}.{figure_format}'
+        else:
+            fig_file = self.figure_dir / f'{label}.{figure_format}'
         fig_file_local = f'{self.figure_dir_name}/{fig_file.name}'
         if fig_file.exists():
             logger.warning(f'File {fig_file} already exists...over-writing.')
-        if self.fig_format == 'png' and 'dpi' not in kwargs:
-            kwargs['dpi'] = self.dpi
-            logger.info("adding 600 dpi")
-        f.savefig(fig_file,  **kwargs)
-
+        f.savefig(fig_file, dpi=dpi,  **kwargs)
+        logger.info(f'{dpi} dpi fig written to {fig_file}')
         # not the caption, that can contain tex
         if not self.clean_underscores(caption):
             logger.warning('Caption contains unescaped underscores _. You must ensure they are in dollars.')
@@ -392,6 +392,38 @@ class SimpleManager(ManagerBase):
         if not tacit:
             display(Markdown(self.file.open('r').read()))
 
+    def buffer_to_blog(self, tacit=True, dry_run=True, source_dir=None, out_dir=None):
+        """
+        Post the buffer as a blog entry
+
+        Remember to add the tags!
+
+        :param tacit: passed to buffer_persist
+        :param dry_run: bassed to BlogPublisher routine
+        :param source_dir:  default is .
+        :param out_dir:  defualut is Path.hom() / 'S/websites/new_mynl/blog'
+        :return:
+        """
+
+        sys.path.append(str((Path.home() / 'S/TELOS/blog/Python').resolve()))
+        from blog_tools import BlogPublisher
+
+        if source_dir is None:
+            source_dir = Path('.').resolve()
+        if out_dir is None:
+            out_dir = Path.home() / 'S/Websites/new_mynl/blog'
+
+        # make blog poster object
+        bp = BlogPublisher(source_dir, out_dir, update=True, dry_run=dry_run)
+
+        # create file of buffer
+        self.buffer_persist(tacit=tacit)
+
+        logger.info(f'Publishing {self.file}')
+
+        # publish it
+        bp.publish_file(self.file)
+
 
 @magics_class
 class SimpleManagerMagic(Magics):
@@ -431,7 +463,7 @@ class SimpleManagerMagic(Magics):
         if args.fstring:
             logger.debug('evaluating as f string')
             if args.code:
-                temp = f'f"""\\\\\\\\footnotesize\n\n```python\n{cell}\n```\n\\\\\\\\normalsize"""'
+                temp = f'f"""\n\n```python\n{cell.strip()}\n```\n\n"""'
             else:
                 temp = f'f"""{cell}"""'
             cell = self.shell.ev(temp)
@@ -445,8 +477,10 @@ class SimpleManagerMagic(Magics):
     @magic_arguments('%smf')
     @argument('-c', '--command', action='store_true', help='Load the underlying command into the current cell')
     @argument('-d', '--debug', action='store_true', help='Turn debug on temporarily .')
+    @argument('--dpi', type=int, default=600, help='DPI for savefig. Default 600.')
     @argument('-f', '--fstring', action='store_true', help='Convert caption into f string and evaluate.')
     @argument('-i', '--ignore', action='store_true', help='Ignore the cell, turns into a comment')
+    @argument('-m', '--format', type=str, default='jpg', help='Save file format, default jpg')
     @argument('-n', '--new_slide', action='store_true', help='Set to use label as second level heading. '
                                                              'Note difference to pmt')
     @argument('-o', '--option', action='store_true',
@@ -456,7 +490,7 @@ class SimpleManagerMagic(Magics):
     @argument('-w', '--width', type=int, default=100, help='Horizontal size, generates width=width clause.')
     def smf(self, line='', cell=None):
         """
-        SimpleManager figure utility. Add a new figure to the stream, format and save as self.fig_format file.
+        SimpleManager figure utility. Add a new figure to the stream, format and save as format file.
 
         @argument('-h', '--height', type=float, default=0.0, help='Vertical size, generates height=height clause.')
 
@@ -497,7 +531,8 @@ class SimpleManagerMagic(Magics):
 
         logger.info(caption)
         s = f'promise = SM.figure({f}, "{label}", buf="{buf}", caption="""{caption}""", ' \
-            f'new_slide={args.new_slide}, tacit={args.tacit}, promise={args.promise}, option={args.option}'
+            f'new_slide={args.new_slide}, tacit={args.tacit}, promise={args.promise}, ' \
+            f'option={args.option}, figure_format="{args.format}", dpi={args.dpi}'
         if args.width:
             s += f', width={args.width}'
         s += ')'

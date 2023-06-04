@@ -6,14 +6,22 @@ from abc import ABC
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-from wordcloud import WordCloud, ImageColorGenerator
 import numpy as np
 import pandas as pd
-from PIL import Image
+
+try:
+    from wordcloud import WordCloud, ImageColorGenerator
+    from PIL import Image
+    from nltk.stem import PorterStemmer, SnowballStemmer, LancasterStemmer
+    from nltk.corpus import stopwords
+except ModuleNotFoundError:
+    print('great warning: missing modules for word_tools')
+    class WordCloud():
+        pass
+import html
 
 import re
 from pathlib import Path
-import html
 from collections import OrderedDict
 from textwrap import fill
 import logging
@@ -23,8 +31,6 @@ from IPython.display import display, SVG
 
 # from IPython.display import Markdown, HTML
 
-from nltk.stem import PorterStemmer, SnowballStemmer, LancasterStemmer
-from nltk.corpus import stopwords
 
 logger = logging.getLogger('textanalyzer')
 logger.setLevel(logging.DEBUG)

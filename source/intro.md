@@ -2,8 +2,7 @@
 
 ## Documentation
 
-http://www.mynl.com/aggregate/documentation.html
-
+http://www.mynl.com/aggregate/
 
 ## Where to get it
 
